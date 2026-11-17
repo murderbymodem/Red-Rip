@@ -156,6 +156,14 @@ The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl
 - The warning "No supported JavaScript runtime could be found" means deno is missing. Click **Download / update ytdl-sub, deno and ffmpeg** in Settings.
 - Keep throttle protection on. Very fast downloading is the easiest way to get rate-limited.
 
+## Making a release
+
+1. Set the new version in `ytdlsub_win_gui/__init__.py` and merge it to `main`.
+2. On GitHub: **Releases → Draft a new release**, create the tag `v<version>` (e.g. `v0.2.0`) on `main`,
+   write notes (or use **Generate release notes**), and **Publish**.
+3. The Build workflow runs for that tag and attaches `ytdl-sub-win-gui.exe` and `SHA256SUMS.txt` to the
+   release within a few minutes. It fails without attaching anything if the tag doesn't match the version.
+
 ## Development
 
 ```
