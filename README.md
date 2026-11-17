@@ -8,6 +8,8 @@ every day into a Jellyfin-ready TV library. It writes ytdl-sub's YAML for you.
 Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui` container image
 (a web-based config editor).
 
+<img width="775" height="818" alt="ytdl-sub-win-gui_2WovSnTUpi" src="https://github.com/user-attachments/assets/7c04e767-b1ee-4b5b-ac81-fee14f77f13c" />
+
 ## Features
 
 - **Channel list**: one channel is one Jellyfin TV show. A show can merge several URLs (e.g. a main channel and its second channel).
