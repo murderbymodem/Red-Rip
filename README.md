@@ -63,7 +63,9 @@ Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui`
   - *Rolling window*: keeps only the last N days (or the last N videos) and deletes older ones. Useful for news channels.
 - **Skip Shorts and livestreams**: on by default. It uses the channel's `/videos` tab.
 - **Daily schedule** via Windows Task Scheduler. The app doesn't need to be open. If the PC was off or asleep at the scheduled time, the run happens when it comes back. Each run is logged.
-- **Run now, Dry run, or Download selected**, with a live log.
+- **Run now, Dry run, or Download selected**, with a live log and a **Current batch** panel: which video is
+  downloading (stage, MB downloaded, speed, progress bar), which are done, and which are up next. The log only
+  follows new output while it's scrolled to the bottom, so you can scroll up and read.
 - **Jellyfin library refresh** after each run (optional; needs an API key).
 - **One-click setup**: downloads `ytdl-sub.exe`, `ffmpeg.exe`, `ffprobe.exe` and `deno.exe` (the JavaScript runtime yt-dlp now needs for YouTube). It can also update ytdl-sub weekly before scheduled runs, because YouTube changes often break old yt-dlp versions.
 - Video quality presets (Max 480p – 2160p / best), a cookies.txt option, throttle protection, and a cap on downloads per run.

@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Qt, QThread, QTime, QTimer, Signal, Slot
@@ -13,7 +14,7 @@ from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPlainTextEdit, QProgressDialog, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QListWidget, QPlainTextEdit, QProgressBar, QProgressDialog, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QTabWidget, QTimeEdit, QVBoxLayout, QWidget,
 )
 
@@ -548,6 +549,32 @@ class MainWindow(QMainWindow):
         btns.addWidget(last_btn)
         btns.addWidget(logs_btn)
 
+        prog = QGroupBox("Current batch")
+        self.p_title = QLabel("Not running")
+        self.p_title.setStyleSheet("font-weight: bold;")
+        self.p_stage = QLabel("")
+        self.p_stage.setWordWrap(True)
+        self.p_bar = QProgressBar()
+        self.p_bar.setRange(0, 1000)
+        self.p_bar.setTextVisible(False)
+        self.p_bar.setMaximumHeight(10)
+        self.p_bar.hide()
+        self.p_list = QListWidget()
+        self.p_list.setMaximumHeight(140)
+        self.p_list.setToolTip("Videos in this batch, in download order:\n"
+                               "▶ downloading now   ✓ done   · up next   ↷ skipped   ✗ failed")
+        pl = QVBoxLayout(prog)
+        pl.addWidget(self.p_title)
+        pl.addWidget(self.p_stage)
+        pl.addWidget(self.p_bar)
+        pl.addWidget(self.p_list)
+        self.progress = runner.ProgressTracker()
+        self._size_cache: dict[str, Path | None] = {}
+        self._last_bytes: tuple[float, int] | None = None
+        self.p_timer = QTimer(self)
+        self.p_timer.setInterval(1000)
+        self.p_timer.timeout.connect(self._render_progress)
+
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setFont(QFont("Consolas", 9))
@@ -556,6 +583,7 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(w)
         lay.addWidget(sched)
         lay.addLayout(btns)
+        lay.addWidget(prog)
         lay.addWidget(self.log, 1)
         return w
 
@@ -597,9 +625,15 @@ class MainWindow(QMainWindow):
         TextViewer(self, logs[-1].name, logs[-1].read_text(encoding="utf-8", errors="replace")).exec()
 
     def _append_log(self, text: str):
-        self.log.moveCursor(QTextCursor.End)
-        self.log.insertPlainText(text)
-        self.log.moveCursor(QTextCursor.End)
+        # Only follow new output while the view is at the bottom, so you can scroll up and
+        # read without being yanked back down. Scrolling to the bottom resumes following.
+        sb = self.log.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 3
+        cursor = QTextCursor(self.log.document())  # separate cursor: keeps the user's selection
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(text)
+        if at_bottom:
+            sb.setValue(sb.maximum())
 
     def _start_run(self, dry_run: bool, selected_only: bool = False):
         if self.proc is not None:
@@ -629,11 +663,15 @@ class MainWindow(QMainWindow):
         self._dry = dry_run
         self._stopped = False
         self._batch = 0
+        self._size_cache = {}
         self._launch(match)
 
     def _launch(self, match: list[str] | None):
         """Start one ytdl-sub invocation (one batch)."""
         self._batch += 1
+        self.progress = runner.ProgressTracker()
+        self._last_bytes = None
+        self.p_timer.start()
         cmd = runner.build_command(self.state, dry_run=self._dry, match=match)
         header = ""
         if self._batch > 1:
@@ -667,6 +705,7 @@ class MainWindow(QMainWindow):
         text = ANSI_RE.sub("", bytes(self.proc.readAllStandardOutput()).decode("utf-8", "replace"))
         text = text.replace("\r\n", "\n")
         self.tracker.feed(text)
+        self.progress.feed(text)
         self._log_write(text)
 
     def _proc_error(self, err):
@@ -693,6 +732,10 @@ class MainWindow(QMainWindow):
             self.log_file.close()
             self.log_file = None
         self._set_running(False)
+        self.progress.finish()
+        if self._stopped:
+            self.progress.stage = "stopped"
+        self._render_progress()
         s = self.state.settings
         if not self._dry and s.jellyfin_refresh and s.jellyfin_api_key:
             def work():
@@ -708,6 +751,65 @@ class MainWindow(QMainWindow):
             self._log_write("\nStopping… (videos already moved into the library are kept)\n")
             runner.kill_tree(self.proc.processId())
             self.proc.kill()
+
+    # ---- live progress panel
+    @staticmethod
+    def _fmt_bytes(n: float) -> str:
+        for unit in ("B", "KB", "MB", "GB"):
+            if n < 1024 or unit == "GB":
+                return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}"
+            n /= 1024
+        return f"{n:.1f} GB"
+
+    def _working_dir(self) -> Path:
+        return Path(self.state.settings.working_dir or (app_dir() / "working"))
+
+    def _render_progress(self):
+        t = self.progress
+        running = self.proc is not None
+        if not t.channel:
+            self.p_title.setText(f"Batch {self._batch}: starting…" if running else "Not running")
+        else:
+            pos = f" · video {t.position}" if t.position and t.current else ""
+            self.p_title.setText(f"{t.channel} · batch {self._batch}{pos}")
+
+        # Download progress from the files growing in the working folder
+        detail, fraction = "", None
+        if running and t.current and t.stage.startswith("downloading"):
+            if t.current not in self._size_cache or self._size_cache[t.current] is None:
+                self._size_cache[t.current] = runner.find_info_json(self._working_dir(), t.current)
+            info = self._size_cache[t.current]
+            if info is not None:
+                done = runner.downloaded_bytes(info)
+                total = runner.expected_size(info)
+                now = time.monotonic()
+                speed = ""
+                if self._last_bytes and now > self._last_bytes[0] and done >= self._last_bytes[1]:
+                    rate = (done - self._last_bytes[1]) / (now - self._last_bytes[0])
+                    speed = f" · {self._fmt_bytes(rate)}/s"
+                self._last_bytes = (now, done)
+                detail = f" · {self._fmt_bytes(done)}" + (f" of ~{self._fmt_bytes(total)}" if total else "") + speed
+                if total:
+                    fraction = min(done / total, 1.0)
+        else:
+            self._last_bytes = None
+        current = f"▶ {t.current} — " if t.current else ""
+        self.p_stage.setText(f"{current}{t.stage}{detail}" if (t.stage or current) else "")
+        self.p_bar.setVisible(fraction is not None)
+        if fraction is not None:
+            self.p_bar.setValue(int(fraction * 1000))
+
+        marks = {runner.CURRENT: "▶", runner.DONE: "✓", runner.QUEUED: "·",
+                 runner.SKIPPED: "↷", runner.FAILED: "✗"}
+        rows = [f"{marks[i['status']]}  {i['title']}" for i in t.items]
+        if rows != [self.p_list.item(k).text() for k in range(self.p_list.count())]:
+            self.p_list.clear()
+            self.p_list.addItems(rows)
+            for k, i in enumerate(t.items):
+                if i["status"] == runner.CURRENT:
+                    self.p_list.scrollToItem(self.p_list.item(k))
+        if not running:
+            self.p_timer.stop()
 
     def _set_running(self, running: bool):
         self.run_btn.setEnabled(not running)
