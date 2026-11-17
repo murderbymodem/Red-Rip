@@ -4,6 +4,8 @@ import sys
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ytdl-sub-win-gui")
+    from ytdlsub_win_gui import __version__
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--headless", action="store_true",
                         help="run all enabled subscriptions without UI (used by the scheduled task)")
     args = parser.parse_args()

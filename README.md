@@ -68,6 +68,15 @@ Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui`
 - **One-click setup**: downloads `ytdl-sub.exe`, `ffmpeg.exe`, `ffprobe.exe` and `deno.exe` (the JavaScript runtime yt-dlp now needs for YouTube). It can also update ytdl-sub weekly before scheduled runs, because YouTube changes often break old yt-dlp versions.
 - Video quality presets (Max 480p – 2160p / best), a cookies.txt option, throttle protection, and a cap on downloads per run.
 
+## Download
+
+Get `ytdl-sub-win-gui.exe` from the [Releases page](https://github.com/murderbymodem/ytdl-sub-win-gui/releases)
+and put it in its own folder (it creates a `data` folder next to itself). No Python needed.
+
+Each release is built from this repository's source by GitHub Actions (see the build log linked from the
+release), and the release lists the `.exe`'s SHA-256 checksum. The `.exe` isn't code-signed, so Windows
+SmartScreen may warn on first launch ("Windows protected your PC" → **More info** → **Run anyway**).
+
 ## Running it
 
 From source (**Python 3.10 – 3.13**; 3.14+ may lack prebuilt PySide6/PyYAML packages and fail with
