@@ -231,7 +231,7 @@ def write_files(state: AppState, directory: Path | None = None) -> tuple[Path, P
 
 # --------------------------------------------------------------------------- dates from titles
 # For channels that re-upload streams/broadcasts, the real air date is often in the video
-# title ("Streamer - [November 15th 2026] SUB SUNDAY"). These ytdl-sub script overrides parse
+# title ("Streamer - [November 15th 2026] WEEKLY STREAM"). These ytdl-sub script overrides parse
 # it and use it for season/episode numbers and the .nfo aired date. If no date is found in
 # a title, the upload date is used for that video. (No braces in the regexes: they would
 # clash with ytdl-sub's {script} syntax.)

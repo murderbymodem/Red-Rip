@@ -13,7 +13,7 @@ def test_settings_migrate_from_old_app_name(tmp_path, monkeypatch):
     (old / "bin").mkdir(parents=True)
     (old / "bin" / "ytdl-sub").write_text("x")
     (old / "state.json").write_text(json.dumps({
-        "settings": {"ytdlsub_path": str(old / "bin" / "ytdl-sub"), "library_dir": "E:/Media"},
+        "settings": {"ytdlsub_path": str(old / "bin" / "ytdl-sub"), "library_dir": "D:/Videos"},
         "subscriptions": [{"name": "Example VOD Archive", "urls": ["u"]}]}))
     monkeypatch.setattr(models.Path, "home", classmethod(lambda cls: home))
     monkeypatch.delenv("APPDATA", raising=False)
@@ -25,4 +25,4 @@ def test_settings_migrate_from_old_app_name(tmp_path, monkeypatch):
     assert models.app_dir() == install / "data"
     assert [s.name for s in st.subscriptions] == ["Example VOD Archive"]
     assert st.settings.ytdlsub_path == str(install / "data" / "bin" / "ytdl-sub")
-    assert st.settings.library_dir == "E:/Media"
+    assert st.settings.library_dir == "D:/Videos"

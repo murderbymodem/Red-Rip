@@ -136,7 +136,7 @@ def test_title_date_overrides():
     except ImportError:
         return
     cases = {
-        "Streamer - [November 15th 2026] SUB SUNDAY": ("202611", "1501", "2026-11-15"),
+        "Streamer - [November 15th 2026] WEEKLY STREAM": ("202611", "1501", "2026-11-15"),
         "Stream Feb 3, 2022 part 2": ("202202", "0301", "2022-02-03"),
         "VOD 14th of February 2022": ("202202", "1401", "2022-02-14"),
         "Highlights 2021-07-04": ("202107", "0401", "2021-07-04"),

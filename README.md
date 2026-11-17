@@ -27,7 +27,7 @@ Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui`
 - **File names**: per channel, files can be named `s202202.e1401 - Title` (default) or `2022-02-14 - Title`.
   Season and episode numbers are always in the `Season` folder and the `.nfo`. With a date in front, Jellyfin treats
   the file as a dated episode and takes the numbers from the `.nfo`. A plain `Title` option isn't offered: Jellyfin's
-  file-name parser reads titles like `… November 15th 2026 SUB SUNDAY` as season 20, episode 26, and a season from the
+  file-name parser reads titles like `… November 15th 2026 WEEKLY STREAM` as season 20, episode 26, and a season from the
   file name overrides both the folder and the `.nfo`.
 - **Episode metadata** (per channel): `.nfo` file only (default, fastest), `.nfo` + tags inside the video, or tags
   only. Writing tags into the video means ffmpeg rewrites the whole file once more, which takes a while for

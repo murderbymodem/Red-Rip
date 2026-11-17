@@ -61,7 +61,7 @@ FILE_NAMINGS = {
     "date_title": "2022-02-14 - Original Title   (needs .nfo metadata)",
 }
 # A plain "Original Title" option was removed: Jellyfin's file-name parser turns titles
-# like "... November 15th 2026 SUB SUNDAY" into season 20 / episode 26, and a season
+# like "... November 15th 2026 WEEKLY STREAM" into season 20 / episode 26, and a season
 # parsed from the file name overrides both the Season folder and embedded tags.
 
 SEASON_ORDERINGS = {
