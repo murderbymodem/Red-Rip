@@ -34,15 +34,21 @@ jobs:
       - name: Run tests
         run: python -m pytest -q tests
 
-      - name: Check tag matches app version
+      - name: Set app version from release tag
         if: github.event_name == 'release'
         shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          $version = python -c "from ytdlsub_win_gui import __version__; print(__version__)"
-          if ("v$version" -ne "${{ github.event.release.tag_name }}") {
-            Write-Error "Release tag ${{ github.event.release.tag_name }} does not match __version__ $version in ytdlsub_win_gui/__init__.py (expected v$version)"
+          # The release tag is the version: "v0.1.2" and "0.1.2" both mean 0.1.2.
+          # It's written into the app before building, so nobody edits a version by hand.
+          $version = $env:TAG -replace '^[vV]', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+            Write-Error "Release tag '$env:TAG' isn't a version number. Use something like v0.1.2."
             exit 1
           }
+          "__version__ = `"$version`"" | Out-File -Encoding utf8NoBOM ytdlsub_win_gui\__init__.py
+          Get-Content ytdlsub_win_gui\__init__.py
 
       - name: Build .exe
         run: pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui launcher.py
