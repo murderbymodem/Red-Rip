@@ -53,18 +53,38 @@ jobs:
           $p = Start-Process dist\ytdl-sub-win-gui.exe -ArgumentList "--version" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "--version exited with $($p.ExitCode)"; exit 1 }
 
+      - name: Package zip
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Zip contains one top-level folder, so extracting always gives the app its own folder
+          # (it creates its data folder next to the .exe).
+          $suffix = if ($env:TAG) { $env:TAG } else { "${{ github.sha }}".Substring(0, 7) }
+          $zipName = "ytdl-sub-win-gui-$suffix.zip"
+          $folder = "package\ytdl-sub-win-gui"
+          New-Item -ItemType Directory -Force $folder | Out-Null
+          Copy-Item dist\ytdl-sub-win-gui.exe, LICENSE, README.md $folder
+          Compress-Archive -Path $folder -DestinationPath "dist\$zipName" -Force
+          # Verify the layout: ytdl-sub-win-gui\ytdl-sub-win-gui.exe at the top of the zip
+          Expand-Archive "dist\$zipName" -DestinationPath check -Force
+          if (-not (Test-Path "check\ytdl-sub-win-gui\ytdl-sub-win-gui.exe")) { Write-Error "unexpected zip layout"; exit 1 }
+          "ZIP_NAME=$zipName" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
       - name: Checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash dist\ytdl-sub-win-gui.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  ytdl-sub-win-gui.exe" | Out-File -Encoding ascii dist\SHA256SUMS.txt
+          $lines = foreach ($f in @("dist\$env:ZIP_NAME", "dist\ytdl-sub-win-gui.exe")) {
+            "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
+          }
+          $lines | Out-File -Encoding ascii dist\SHA256SUMS.txt
           Get-Content dist\SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v7
         with:
           name: ytdl-sub-win-gui
           path: |
-            dist/ytdl-sub-win-gui.exe
+            dist/${{ env.ZIP_NAME }}
             dist/SHA256SUMS.txt
 
       - name: Attach to release
@@ -74,9 +94,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "$env:TAG" dist/ytdl-sub-win-gui.exe dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
-          $sum = (Get-Content dist\SHA256SUMS.txt).Split(" ")[0]
+          gh release upload "$env:TAG" "dist/$env:ZIP_NAME" dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
+          $zipSum = (Get-Content dist\SHA256SUMS.txt | Select-Object -First 1).Split(" ")[0]
           $body = gh release view "$env:TAG" --json body --jq .body --repo "${{ github.repository }}"
-          $extra = "`n`n---`nSHA-256 of ytdl-sub-win-gui.exe: ``$sum```nBuilt by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $extra = "`n`n---`nDownload **$env:ZIP_NAME**, extract it, and run ``ytdl-sub-win-gui\ytdl-sub-win-gui.exe``.`n`nSHA-256 of $($env:ZIP_NAME): ``$zipSum`` (the .exe's checksum is in SHA256SUMS.txt)`nBuilt by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           Set-Content -Path notes.md -Value (($body -join "`n") + $extra) -Encoding utf8
           gh release edit "$env:TAG" --notes-file notes.md --repo "${{ github.repository }}"

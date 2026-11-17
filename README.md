@@ -70,11 +70,13 @@ Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui`
 
 ## Download
 
-Get `ytdl-sub-win-gui.exe` from the [Releases page](https://github.com/murderbymodem/ytdl-sub-win-gui/releases)
-and put it in its own folder (it creates a `data` folder next to itself). No Python needed.
+Download `ytdl-sub-win-gui-<version>.zip` from the
+[Releases page](https://github.com/murderbymodem/ytdl-sub-win-gui/releases), extract it anywhere (for example
+`C:\`), and run `ytdl-sub-win-gui\ytdl-sub-win-gui.exe`. The zip contains a single `ytdl-sub-win-gui` folder
+because the app creates its `data` folder next to the `.exe` and should have a folder of its own. No Python needed.
 
 Each release is built from this repository's source by GitHub Actions (see the build log linked from the
-release), and the release lists the `.exe`'s SHA-256 checksum. The `.exe` isn't code-signed, so Windows
+release), and the release lists SHA-256 checksums of the zip and the `.exe`. The `.exe` isn't code-signed, so Windows
 SmartScreen may warn on first launch ("Windows protected your PC" → **More info** → **Run anyway**).
 
 ## Running it
@@ -161,7 +163,7 @@ The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl
 1. Set the new version in `ytdlsub_win_gui/__init__.py` and merge it to `main`.
 2. On GitHub: **Releases → Draft a new release**, create the tag `v<version>` (e.g. `v0.2.0`) on `main`,
    write notes (or use **Generate release notes**), and **Publish**.
-3. The Build workflow runs for that tag and attaches `ytdl-sub-win-gui.exe` and `SHA256SUMS.txt` to the
+3. The Build workflow runs for that tag and attaches `ytdl-sub-win-gui-v<version>.zip` and `SHA256SUMS.txt` to the
    release within a few minutes. It fails without attaching anything if the tag doesn't match the version.
 
 ## Development
