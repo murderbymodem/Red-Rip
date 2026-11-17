@@ -1,0 +1,28 @@
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from ytdlsub_win_gui import models  # noqa: E402
+
+
+def test_settings_migrate_from_old_app_name(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    old = home / ".config" / "ytdl-sub-gui"          # %APPDATA%\ytdl-sub-gui on Windows
+    (old / "bin").mkdir(parents=True)
+    (old / "bin" / "ytdl-sub").write_text("x")
+    (old / "state.json").write_text(json.dumps({
+        "settings": {"ytdlsub_path": str(old / "bin" / "ytdl-sub"), "library_dir": "E:/Media"},
+        "subscriptions": [{"name": "Example VOD Archive", "urls": ["u"]}]}))
+    monkeypatch.setattr(models.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("APPDATA", raising=False)
+    install = tmp_path / "app"
+    monkeypatch.setattr(models, "install_dir", lambda: install)
+    monkeypatch.setattr(models, "_APP_DIR", None)
+
+    st = models.AppState.load()
+    assert models.app_dir() == install / "data"
+    assert [s.name for s in st.subscriptions] == ["Example VOD Archive"]
+    assert st.settings.ytdlsub_path == str(install / "data" / "bin" / "ytdl-sub")
+    assert st.settings.library_dir == "E:/Media"

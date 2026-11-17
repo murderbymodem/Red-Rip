@@ -1,0 +1,195 @@
+"""Running ytdl-sub: command building, headless (scheduled) runs, Jellyfin refresh."""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+from . import configgen
+from .models import MODE_ALL, AppState, app_dir, bin_dir, logs_dir
+
+CREATE_NO_WINDOW = 0x08000000  # don't flash a console window from the scheduled task
+
+# Safety cap on back-to-back batches in one run (5 videos x 400 = 2000 videos).
+MAX_BATCHES = 400
+
+_BEGIN_RE = re.compile(r"Beginning subscription \S+ for (.+?)\s*$")
+_NO_CHANGE_RE = re.compile(r"^No files changed for (.+?)\s*$")
+
+
+class BatchTracker:
+    """Reads ytdl-sub output to find 'Everything' channels that stopped at their
+    batch limit (MaxDownloadsReached) and therefore have more videos waiting."""
+
+    def __init__(self):
+        self.current: str | None = None
+        self.truncated: set[str] = set()
+        self.unchanged: set[str] = set()
+        self._partial = ""
+
+    def feed(self, text: str) -> None:
+        self._partial += text
+        *lines, self._partial = self._partial.split("\n")
+        for line in lines:
+            self._line(line)
+
+    def _line(self, line: str) -> None:
+        if m := _BEGIN_RE.search(line):
+            self.current = m.group(1)
+        elif "MaxDownloadsReached" in line and self.current:
+            self.truncated.add(self.current)
+        elif m := _NO_CHANGE_RE.match(line.strip()):
+            self.unchanged.add(m.group(1))
+
+    def next_batch(self, state: AppState) -> list[str]:
+        """Channels to run again. A channel that hit the limit but changed no files
+        is not repeated (avoids looping forever on videos that keep failing)."""
+        self.feed("\n")
+        all_mode = {s.name for s in state.subscriptions if s.enabled and s.mode == MODE_ALL}
+        return sorted((self.truncated - self.unchanged) & all_mode)
+
+
+def child_env() -> dict:
+    """Environment for ytdl-sub: bin folder on PATH so yt-dlp finds deno/ffmpeg."""
+    env = dict(os.environ)
+    env["PATH"] = str(bin_dir()) + os.pathsep + env.get("PATH", "")
+    # ytdl-sub.exe is Python: make it write UTF-8 so titles/messages aren't garbled (e.g. "you\ufffdre")
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def kill_tree(pid: int) -> None:
+    """ytdl-sub.exe is a PyInstaller one-file exe: a launcher process plus the real
+    worker. Killing only the launcher leaves the worker running, so kill the tree."""
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                       capture_output=True, creationflags=CREATE_NO_WINDOW)
+    else:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+
+
+def build_command(state: AppState, dry_run: bool = False, match: list[str] | None = None) -> list[str]:
+    config_path, subs_path = configgen.write_files(state)
+    cmd = [state.settings.ytdlsub_path, "--config", str(config_path), "--suppress-colors"]
+    if dry_run:
+        cmd.append("--dry-run")
+    cmd += ["sub", str(subs_path)]
+    if match:
+        cmd += ["--match", *match]
+    return cmd
+
+
+def new_log_path(prefix: str) -> Path:
+    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    return logs_dir() / f"{prefix}_{stamp}.log"
+
+
+def prune_logs(keep: int = 60) -> None:
+    logs = sorted(logs_dir().glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in logs[keep:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
+def refresh_jellyfin(url: str, api_key: str, timeout: float = 15) -> str:
+    """Ask Jellyfin to scan all libraries. Returns a human-readable result."""
+    req = urllib.request.Request(
+        url.rstrip("/") + "/Library/Refresh",
+        method="POST",
+        data=b"",
+        headers={
+            "Authorization": f'MediaBrowser Token="{api_key}"',
+            "X-Emby-Token": api_key,  # older servers
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return f"Jellyfin library refresh requested (HTTP {resp.status})."
+
+
+def test_jellyfin(url: str, api_key: str, timeout: float = 10) -> str:
+    req = urllib.request.Request(
+        url.rstrip("/") + "/System/Info",
+        headers={"Authorization": f'MediaBrowser Token="{api_key}"', "X-Emby-Token": api_key},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        info = json.loads(resp.read().decode("utf-8"))
+    return f"Connected to {info.get('ServerName', 'Jellyfin')} (version {info.get('Version', '?')})."
+
+
+def run_headless() -> int:
+    """Entry point for the scheduled task. Never shows UI; logs to a file."""
+    state = AppState.load()
+    log_path = new_log_path("scheduled")
+    prune_logs()
+    with open(log_path, "w", encoding="utf-8", errors="replace") as log:
+        def say(msg: str) -> None:
+            log.write(f"[{dt.datetime.now():%H:%M:%S}] {msg}\n")
+            log.flush()
+
+        if state.settings.auto_update_ytdlsub:
+            try:
+                from . import tools
+                msg = tools.update_ytdlsub_if_stale(state.settings, max_age_days=7)
+                if msg:
+                    say(msg)
+                    state.save()
+            except Exception as exc:  # update failure must not block the run
+                say(f"ytdl-sub auto-update failed (continuing with current version): {exc}")
+        if sys.platform == "win32" and not state.settings.deno_path:
+            try:
+                from . import tools
+                state.settings.deno_path = str(tools.download_deno())
+                state.save()
+                say("Installed deno (JavaScript runtime needed by yt-dlp for YouTube).")
+            except Exception as exc:
+                say(f"Could not install deno (continuing without it): {exc}")
+
+        errors = configgen.validate(state)
+        if errors:
+            for e in errors:
+                say(f"CONFIG ERROR: {e}")
+            return 2
+
+        flags = CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        match: list[str] | None = None
+        code = 0
+        for batch in range(1, MAX_BATCHES + 1):
+            cmd = build_command(state, match=match)
+            if batch > 1:
+                say(f"--- Batch {batch}: continuing full archive for {', '.join(match or [])} ---")
+            say("Running: " + subprocess.list2cmdline(cmd))
+            tracker = BatchTracker()
+            proc = subprocess.Popen(
+                cmd, cwd=str(app_dir()), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL, creationflags=flags, env=child_env(),
+            )
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                text = raw.decode("utf-8", errors="replace")
+                tracker.feed(text)
+                log.write(text)
+                log.flush()
+            code = proc.wait()
+            say(f"ytdl-sub exited with code {code}")
+            match = tracker.next_batch(state)
+            if not match:
+                break
+
+        s = state.settings
+        if s.jellyfin_refresh and s.jellyfin_api_key:
+            try:
+                say(refresh_jellyfin(s.jellyfin_url, s.jellyfin_api_key))
+            except Exception as exc:
+                say(f"Jellyfin refresh failed: {exc}")
+        return code
