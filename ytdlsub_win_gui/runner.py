@@ -193,3 +193,149 @@ def run_headless() -> int:
             except Exception as exc:
                 say(f"Jellyfin refresh failed: {exc}")
         return code
+
+
+# --------------------------------------------------------------------------- live progress
+# ytdl-sub prints these at its default log level (yt-dlp's percentage lines are debug-only,
+# so download progress is measured from the files in the working folder instead).
+_PLAYLIST_RE = re.compile(r"\[download\] Downloading playlist: (.+?)\s*$")
+_META_RE = re.compile(r"Downloading metadata for (.+?)\s*$")
+_ENTRY_RE = re.compile(r"Downloading entry (\d+)/(\d+): (.+?)\s*$")
+_ALREADY_RE = re.compile(r"Already downloaded entry \d+/\d+: (.+?)\s*$")
+_SLEEP_RE = re.compile(r"Sleeping between (\w+) for ([\d.]+) seconds")
+
+QUEUED, CURRENT, DONE, SKIPPED, FAILED = "queued", "current", "done", "skipped", "failed"
+
+
+class ProgressTracker:
+    """Follows ytdl-sub output to know the batch's videos and which one is being processed."""
+
+    def __init__(self):
+        self._partial = ""
+        self._reset()
+
+    def _reset(self) -> None:
+        """Start of a channel. (Never touches _partial: text already received but not yet
+        split into lines must survive, or a line straddling two reads would be lost.)"""
+        self.channel = ""
+        self.phase = ""            # "", "lookup", "download"
+        self.items: list[dict] = []  # {"title", "status"} in download order
+        self.current: str | None = None
+        self.position = ""         # "2/5" from "Downloading entry 2/5"
+        self.stage = ""
+        self._playlists: set[str] = set()
+        self._streams = 0
+
+    # -- parsing
+    def feed(self, text: str) -> None:
+        self._partial += text.replace("\r", "\n")
+        *lines, self._partial = self._partial.split("\n")
+        for line in lines:
+            self._line(line)
+
+    def _find(self, title: str) -> dict | None:
+        return next((i for i in self.items if i["title"] == title), None)
+
+    def _finish_current(self) -> None:
+        item = self._find(self.current) if self.current else None
+        if item and item["status"] == CURRENT:
+            item["status"] = DONE
+        self.current = None
+
+    def _line(self, line: str) -> None:
+        if m := _BEGIN_RE.search(line):
+            self._finish_current()
+            self._reset()
+            self.channel, self.phase, self.stage = m.group(1), "lookup", "looking up videos"
+        elif m := _PLAYLIST_RE.search(line):
+            self._playlists.add(m.group(1))
+        elif m := _META_RE.search(line):
+            title = m.group(1)
+            if self.phase == "lookup" and title not in self._playlists and not self._find(title):
+                self.items.append({"title": title, "status": QUEUED})
+                self.stage = f"looking up videos ({len(self.items)} found)"
+        elif "Beginning downloads for" in line:
+            # ytdl-sub downloads a batch in reverse order of its lookup (download_reverse)
+            self.items.reverse()
+            self.phase, self.stage = "download", "starting downloads"
+        elif m := _ENTRY_RE.search(line):
+            self._finish_current()
+            self.phase = "download"
+            self.position, self.current, self._streams = f"{m.group(1)}/{m.group(2)}", m.group(3), 0
+            item = self._find(self.current)
+            if item is None:
+                item = {"title": self.current, "status": QUEUED}
+                self.items.append(item)
+            item["status"] = CURRENT
+            self.stage = "getting video info"
+        elif m := _ALREADY_RE.search(line):
+            item = self._find(m.group(1))
+            if item:
+                item["status"] = SKIPPED
+        elif "Entry rejected by download match-filter" in line and self.current:
+            self._find(self.current)["status"] = SKIPPED
+            self.current = None
+        elif "[download] Destination:" in line and self.current:
+            self._streams += 1
+            self.stage = "downloading video" if self._streams == 1 else "downloading audio"
+        elif "[Merger] Merging formats" in line and self.current:
+            self.stage = "merging video + audio"
+        elif "[Metadata] Adding metadata" in line and self.current:
+            self.stage = "adding chapters"
+        elif m := _SLEEP_RE.search(line):
+            self._finish_current()
+            self.stage = f"pausing {float(m.group(2)):.0f}s between {m.group(1)} (throttle protection)"
+        elif "ERROR:" in line and self.current:
+            self._find(self.current)["status"] = FAILED
+        elif "Download Summary" in line:
+            self.finish()
+
+    def finish(self) -> None:
+        self._finish_current()
+        self.stage = "finished"
+
+    # -- queries
+    def up_next(self) -> list[str]:
+        return [i["title"] for i in self.items if i["status"] == QUEUED]
+
+
+def find_info_json(working_dir: Path, title: str) -> Path | None:
+    """The working-folder .info.json of the video with this title (gives its id and sizes)."""
+    for p in working_dir.rglob("*.info.json"):
+        try:
+            if json.loads(p.read_text(encoding="utf-8")).get("title") == title:
+                return p
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def expected_size(info_json: Path) -> int | None:
+    """Total bytes of the formats yt-dlp will download, if YouTube reported them."""
+    try:
+        info = json.loads(info_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    formats = info.get("requested_formats") or [info]
+    sizes = [f.get("filesize") or f.get("filesize_approx") for f in formats]
+    return int(sum(sizes)) if sizes and all(sizes) else None
+
+
+def downloaded_bytes(info_json: Path) -> int:
+    """Bytes of this video's media files (finished or partial) in the working folder."""
+    vid = info_json.name[: -len(".info.json")]
+    total = 0
+    for p in info_json.parent.glob(f"{glob_escape(vid)}.*"):
+        name = p.name.lower()
+        if name.endswith((".json", ".jpg", ".jpeg", ".png", ".webp", ".ytdl")):
+            continue
+        try:
+            total += p.stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def glob_escape(s: str) -> str:
+    import glob
+    return glob.escape(s)
