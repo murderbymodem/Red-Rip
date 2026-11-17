@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QTabWidget, QTimeEdit, QVBoxLayout, QWidget,
 )
 
-from . import archive, configgen, runner, scheduler, tools
+from . import __version__, archive, configgen, runner, scheduler, tools
 from .models import (
     ARCHIVE_ORDERS, COOKIE_BROWSERS, DATE_SOURCES, FILE_NAMINGS, METADATA_MODES, CONTENT_RATINGS, MODE_RECENT, MODES, QUALITY_PRESETS, SEASON_ORDERINGS, AppState,
     Subscription, app_dir, logs_dir,
@@ -293,7 +293,7 @@ class MainWindow(QMainWindow):
         self.log_file = None
         self._tools_thread = None
         self._tools_dlg = None
-        self.setWindowTitle("ytdl-sub-win-gui — YouTube to Jellyfin")
+        self.setWindowTitle(f"ytdl-sub-win-gui {__version__} — YouTube to Jellyfin")
         self.resize(1050, 720)
 
         tabs = QTabWidget()
