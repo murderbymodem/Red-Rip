@@ -164,11 +164,14 @@ The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl
 
 ## Making a release
 
-1. Set the new version in `ytdlsub_win_gui/__init__.py` and merge it to `main`.
-2. On GitHub: **Releases → Draft a new release**, create the tag `v<version>` (e.g. `v0.2.0`) on `main`,
-   write notes (or use **Generate release notes**), and **Publish**.
-3. The Build workflow runs for that tag and attaches `ytdl-sub-win-gui-v<version>.zip` and `SHA256SUMS.txt` to the
-   release within a few minutes. It fails without attaching anything if the tag doesn't match the version.
+1. Merge the changes you want to release into `main`.
+2. On GitHub: **Releases → Draft a new release**, create a new tag such as `v0.1.2` on `main` (`0.1.2` without
+   the `v` works too), write notes (or use **Generate release notes**), and **Publish**.
+3. The Build workflow runs for that tag, builds the app with that version number, and attaches
+   `ytdl-sub-win-gui-<tag>.zip` and `SHA256SUMS.txt` to the release within a few minutes.
+
+The version in `ytdlsub_win_gui/__init__.py` is only used when running from source; release builds take it
+from the tag. Always use a new tag: re-using a deleted release's tag rebuilds that tag's old commit.
 
 ## Development
 
