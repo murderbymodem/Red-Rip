@@ -243,6 +243,10 @@ class ProgressTracker:
 
     def __init__(self):
         self._partial = ""
+        # Moments where the previous video is fully finished (moved into the library and
+        # recorded as downloaded): the throttle pause after a video, or the next video
+        # starting. "Stop after current video" stops at the next one of these.
+        self.safe_points = 0
         self._reset()
 
     def _reset(self) -> None:
@@ -290,6 +294,7 @@ class ProgressTracker:
             self.items.reverse()
             self.phase, self.stage = "download", "starting downloads"
         elif m := _ENTRY_RE.search(line):
+            self.safe_points += 1
             self._finish_current()
             self.phase = "download"
             self.position, self.current, self._streams = f"{m.group(1)}/{m.group(2)}", m.group(3), 0
@@ -314,6 +319,8 @@ class ProgressTracker:
         elif "[Metadata] Adding metadata" in line and self.current:
             self.stage = "adding chapters"
         elif m := _SLEEP_RE.search(line):
+            if m.group(1) == "downloads":
+                self.safe_points += 1
             self._finish_current()
             self.stage = f"pausing {float(m.group(2)):.0f}s between {m.group(1)} (throttle protection)"
         elif "ERROR:" in line and self.current:

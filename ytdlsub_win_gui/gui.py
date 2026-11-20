@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QTabWidget, QTimeEdit, QVBoxLayout, QWidget,
 )
 
-from . import __version__, archive, configgen, runner, scheduler, tools
+from . import __version__, archive, configgen, quick, runner, scheduler, tools
 from .models import (
     ARCHIVE_ORDERS, COOKIE_BROWSERS, DATE_SOURCES, FILE_NAMINGS, METADATA_MODES, CONTENT_RATINGS, MODE_RECENT, MODES, QUALITY_PRESETS, SEASON_ORDERINGS, AppState,
     Subscription, app_dir, logs_dir,
@@ -286,6 +286,8 @@ class MainWindow(QMainWindow):
     sched_status_text = Signal(str)
     tools_progress = Signal(str, object, object)
     tools_finished = Signal(str)
+    q_update_done = Signal()
+    q_log_line = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -300,12 +302,14 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.addTab(self._build_channels_tab(), "Channels")
         tabs.addTab(self._build_run_tab(), "Run && Schedule")
+        tabs.addTab(self._build_quick_tab(), "Quick download")
         tabs.addTab(self._build_settings_tab(), "Settings")
         self.setCentralWidget(tabs)
         self.log_line.connect(self._append_log)
         self.sched_status_text.connect(self.sched_status.setText)
         self.tools_progress.connect(self._on_tools_progress)
         self.tools_finished.connect(self._on_tools_finished)
+        self.q_log_line.connect(self._q_append)
 
         self._refresh_table()
         self._load_settings_into_form()
@@ -538,12 +542,17 @@ class MainWindow(QMainWindow):
         self.run_btn.clicked.connect(lambda: self._start_run(dry_run=False))
         self.dry_btn.clicked.connect(lambda: self._start_run(dry_run=True))
         self.stop_btn.clicked.connect(self._stop_run)
+        self.stop_after_btn = QPushButton("■  Stop after current video")
+        self.stop_after_btn.setToolTip("Let the video that's downloading now finish (download, merge, move into\n"
+                                       "the library), then stop and skip the rest of the batch.")
+        self.stop_after_btn.setEnabled(False)
+        self.stop_after_btn.clicked.connect(self._stop_after_current)
         logs_btn = QPushButton("Open logs folder")
         logs_btn.clicked.connect(lambda: open_path(logs_dir()))
         last_btn = QPushButton("View last scheduled log")
         last_btn.clicked.connect(self._view_last_scheduled_log)
         btns = QHBoxLayout()
-        for b in (self.run_btn, self.dry_btn, self.stop_btn):
+        for b in (self.run_btn, self.dry_btn, self.stop_btn, self.stop_after_btn):
             btns.addWidget(b)
         btns.addStretch(1)
         btns.addWidget(last_btn)
@@ -668,6 +677,8 @@ class MainWindow(QMainWindow):
         self._batch = 0
         self._size_cache = {}
         self._block_waits = 0
+        self._stop_after_pending = False
+        self._stop_after_mark = 0
         self._launch(match)
 
     def _launch(self, match: list[str] | None):
@@ -713,6 +724,15 @@ class MainWindow(QMainWindow):
         self.tracker.feed(text)
         self.progress.feed(text)
         self._log_write(text)
+        if (self._stop_after_pending and self.proc is not None
+                and self.progress.safe_points > self._stop_after_mark):
+            # The video that was downloading is now in the library and recorded; stop here.
+            self._stopped = True
+            self._stop_after_pending = False
+            self._log_write("\n=== Current video finished. Stopping the rest of the batch.\n")
+            runner.kill_tree(self.proc.processId())
+            self.proc.kill()
+            return
         s = self.state.settings
         if self.tracker.blocked and s.pause_on_block and not self._block_stop and not self._dry:
             # yt-dlp would carry on with older videos; stop so the order is kept
@@ -735,6 +755,10 @@ class MainWindow(QMainWindow):
         self.proc.deleteLater()
         self.proc = None
 
+        if self._stop_after_pending:
+            # The batch ended on its own while we were waiting for the current video: done.
+            self._stopped = True
+            self._stop_after_pending = False
         s = self.state.settings
         if self._block_stop and not self._stopped:
             self._block_waits += 1
@@ -851,6 +875,8 @@ class MainWindow(QMainWindow):
         else:
             self._last_bytes = None
         current = f"▶ {t.current} — " if t.current else ""
+        if getattr(self, "_stop_after_pending", False) and self.proc is not None:
+            current = current.replace(" — ", " — stopping after this video · ", 1) if current else ""
         self.p_stage.setText(f"{current}{t.stage}{detail}" if (t.stage or current) else "")
         self.p_bar.setVisible(fraction is not None)
         if fraction is not None:
@@ -872,8 +898,248 @@ class MainWindow(QMainWindow):
         self.run_btn.setEnabled(not running)
         self.dry_btn.setEnabled(not running)
         self.stop_btn.setEnabled(running)
+        self.stop_after_btn.setEnabled(running)
+        if not running:
+            self.stop_after_btn.setText("■  Stop after current video")
 
-    # ---- Settings tab
+    def _stop_after_current(self):
+        t = self.progress
+        if self.proc is None or t.phase != "download" or not t.current:
+            # Nothing is downloading (looking up videos, between batches, or waiting
+            # out a YouTube block): stopping now loses nothing.
+            self._stop_run()
+            return
+        self._stop_after_mark = t.safe_points
+        self._stop_after_pending = True
+        self.stop_after_btn.setEnabled(False)
+        self.stop_after_btn.setText("Stopping after current video…")
+        self._log_write(f"\n=== Will stop after '{t.current}' is finished\n")
+        self._render_progress()
+    # ---- Quick download tab
+    def _build_quick_tab(self) -> QWidget:
+        w = QWidget()
+        intro = QLabel("Download a single video or Short with yt-dlp. This is separate from your channels "
+                       "and batches: the file is saved as-is (title as file name, no Jellyfin naming).")
+        intro.setWordWrap(True)
+        self.q_url = QLineEdit()
+        self.q_url.setPlaceholderText("Paste a YouTube video or Shorts URL, e.g. https://www.youtube.com/shorts/…")
+        self.q_url.returnPressed.connect(self._q_add)
+        paste = QPushButton("Paste")
+        paste.clicked.connect(lambda: self.q_url.setText(QApplication.clipboard().text().strip()))
+        add = QPushButton("⬇  Download")
+        add.clicked.connect(self._q_add)
+        row = QHBoxLayout()
+        row.addWidget(self.q_url, 1)
+        row.addWidget(paste)
+        row.addWidget(add)
+
+        self.q_quality = QComboBox()
+        for key, (label, _) in quick.QUALITIES.items():
+            self.q_quality.addItem(label, key)
+        self.q_quality.setCurrentIndex(max(0, self.q_quality.findData(self.state.settings.quick_quality)))
+        self.q_folder = QLineEdit(self.state.settings.quick_folder or str(quick.default_folder()))
+        opts = QFormLayout()
+        opts.addRow("Quality:", self.q_quality)
+        opts.addRow("Save to:", path_row(self.q_folder, w, "dir", "Quick download folder"))
+
+        self.q_list = QListWidget()
+        self.q_list.setToolTip("· queued   ▶ downloading   ✓ saved (double-click to open its folder)   ✗ failed/cancelled")
+        self.q_list.itemDoubleClicked.connect(self._q_open_item)
+        self.q_status = QLabel("Idle")
+        self.q_bar = QProgressBar()
+        self.q_bar.setRange(0, 1000)
+        self.q_bar.setTextVisible(False)
+        self.q_bar.setMaximumHeight(10)
+        cancel = QPushButton("■  Cancel current")
+        cancel.clicked.connect(self._q_cancel)
+        clear = QPushButton("Clear queued")
+        clear.clicked.connect(self._q_clear)
+        open_dir = QPushButton("Open folder")
+        open_dir.clicked.connect(lambda: open_path(Path(self.q_folder.text().strip() or quick.default_folder())))
+        brow = QHBoxLayout()
+        brow.addWidget(cancel)
+        brow.addWidget(clear)
+        brow.addStretch(1)
+        brow.addWidget(open_dir)
+        self.q_log = QPlainTextEdit()
+        self.q_log.setReadOnly(True)
+        self.q_log.setFont(QFont("Consolas", 9))
+        self.q_log.setMaximumBlockCount(5000)
+
+        self.q_items: list[dict] = []
+        self.q_proc: QProcess | None = None
+        self.q_progress = quick.QuickProgress()
+        self._q_update_checked = False
+        self.q_update_done.connect(self._q_next)
+
+        lay = QVBoxLayout(w)
+        lay.addWidget(intro)
+        lay.addLayout(row)
+        lay.addLayout(opts)
+        lay.addWidget(self.q_list, 1)
+        lay.addWidget(self.q_status)
+        lay.addWidget(self.q_bar)
+        lay.addLayout(brow)
+        lay.addWidget(self.q_log, 1)
+        return w
+
+    def _q_add(self):
+        url = self.q_url.text().strip()
+        if not quick.is_url(url):
+            QMessageBox.warning(self, "Quick download", "Paste a full video URL starting with https://")
+            return
+        s = self.state.settings
+        if not s.ytdlp_path or not Path(s.ytdlp_path).exists():
+            if sys.platform == "win32" and QMessageBox.question(
+                    self, "yt-dlp needed",
+                    "Quick download uses yt-dlp, which isn't installed yet.\n\nDownload the tools now?"
+            ) == QMessageBox.Yes:
+                self._download_tools()
+            elif sys.platform != "win32":
+                QMessageBox.information(self, "yt-dlp needed", "Set the yt-dlp path in Settings.")
+            return
+        folder = Path(self.q_folder.text().strip() or quick.default_folder())
+        s.quick_folder = str(folder) if folder != quick.default_folder() else ""
+        s.quick_quality = self.q_quality.currentData()
+        self.state.save()
+        item = {"url": url, "quality": s.quick_quality, "folder": folder, "status": "queued",
+                "name": url, "file": None, "error": None}
+        self.q_items.append(item)
+        self.q_url.clear()
+        self._q_render()
+        if self.q_proc is None:
+            self._q_next()
+
+    def _q_next(self):
+        if self.q_proc is not None:
+            return
+        item = next((i for i in self.q_items if i["status"] == "queued"), None)
+        if item is None:
+            self.q_status.setText("Idle")
+            self.q_bar.setValue(0)
+            return
+        s = self.state.settings
+        if s.auto_update_ytdlsub and not self._q_update_checked:
+            # Once per app session: refresh a week-old yt-dlp first (YouTube breaks old versions)
+            self._q_update_checked = True
+            self.q_status.setText("Checking for a yt-dlp update…")
+
+            def work():
+                try:
+                    msg = tools.update_ytdlp_if_stale(s)
+                    if msg:
+                        self.state.save()
+                        self.q_log_line.emit(msg + "\n")
+                except Exception as exc:
+                    self.q_log_line.emit(f"yt-dlp update failed (using the current version): {exc}\n")
+                self.q_update_done.emit()
+            threading.Thread(target=work, daemon=True).start()
+            return
+        try:
+            item["folder"].mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            item["status"], item["error"] = "failed", f"can't create folder: {exc}"
+            self._q_render()
+            self._q_next()
+            return
+        cmd = quick.build_command(s, item["url"], item["quality"], item["folder"])
+        self.q_progress = quick.QuickProgress()
+        self.q_current = item
+        item["status"] = "current"
+        self._q_append(f"\n$ {subprocess.list2cmdline(cmd)}\n")
+        self.q_proc = QProcess(self)
+        self.q_proc.setWorkingDirectory(str(item["folder"]))
+        env = QProcessEnvironment.systemEnvironment()
+        for k, v in runner.child_env().items():
+            if k in ("PATH", "PYTHONIOENCODING", "PYTHONUTF8"):
+                env.insert(k, v)
+        self.q_proc.setProcessEnvironment(env)
+        self.q_proc.setProcessChannelMode(QProcess.MergedChannels)
+        self.q_proc.readyReadStandardOutput.connect(self._q_read)
+        self.q_proc.finished.connect(self._q_finished)
+        self.q_proc.errorOccurred.connect(self._q_error)
+        self.q_proc.start(cmd[0], cmd[1:])
+        self._q_render()
+
+    def _q_read(self):
+        if not self.q_proc:
+            return
+        text = ANSI_RE.sub("", bytes(self.q_proc.readAllStandardOutput()).decode("utf-8", "replace"))
+        text = text.replace("\r\n", "\n")
+        self.q_progress.feed(text)
+        self._q_append(text)
+        if self.q_progress.name:
+            self.q_current["name"] = self.q_progress.name
+        self._q_render()
+
+    def _q_error(self, err):
+        if err == QProcess.FailedToStart and self.q_proc is not None:
+            self.q_current["error"] = f"couldn't start yt-dlp: {self.q_proc.errorString()}"
+            self._q_finished(-1, None)
+
+    def _q_finished(self, code, _status):
+        if self.q_proc is None:
+            return
+        self._q_read()
+        p, item = self.q_progress, self.q_current
+        if item["status"] == "cancelled":
+            pass
+        elif p.file and code == 0:
+            item["status"], item["file"] = "done", p.file
+            item["name"] = Path(p.file).name
+        else:
+            item["status"] = "failed"
+            item["error"] = item["error"] or p.error or f"yt-dlp exited with code {code}"
+        self._q_append(f"=== {item['status']}: {item['file'] or item['error'] or ''}\n")
+        self.q_proc.deleteLater()
+        self.q_proc = None
+        self._q_render()
+        self._q_next()
+
+    def _q_cancel(self):
+        if self.q_proc is not None:
+            self.q_current["status"] = "cancelled"
+            runner.kill_tree(self.q_proc.processId())
+            self.q_proc.kill()
+
+    def _q_clear(self):
+        self.q_items = [i for i in self.q_items if i["status"] != "queued"]
+        self._q_render()
+
+    def _q_open_item(self, list_item):
+        idx = self.q_list.row(list_item)
+        if 0 <= idx < len(self.q_items):
+            i = self.q_items[idx]
+            open_path(Path(i["file"]).parent if i["file"] else i["folder"])
+
+    def _q_append(self, text: str):
+        sb = self.q_log.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 3
+        cursor = QTextCursor(self.q_log.document())
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(text)
+        if at_bottom:
+            sb.setValue(sb.maximum())
+
+    def _q_render(self):
+        marks = {"queued": "·", "current": "▶", "done": "✓", "failed": "✗", "cancelled": "✗"}
+        rows = []
+        for i in self.q_items:
+            extra = {"failed": f" — failed: {i['error']}", "cancelled": " — cancelled",
+                     "done": f" — saved to {Path(i['file']).parent}" if i["file"] else ""}.get(i["status"], "")
+            rows.append(f"{marks[i['status']]}  {i['name']}{extra}")
+        if rows != [self.q_list.item(k).text() for k in range(self.q_list.count())]:
+            self.q_list.clear()
+            self.q_list.addItems(rows)
+        if self.q_proc is not None:
+            p = self.q_progress
+            pct = f" {p.percent:.1f}%" if p.percent is not None and p.stage.startswith("downloading") else ""
+            detail = f" · {p.detail}" if p.detail and p.stage.startswith("downloading") else ""
+            self.q_status.setText(f"▶ {self.q_current['name']} — {p.stage}{pct}{detail}")
+            self.q_bar.setValue(int((p.percent or 0) * 10) if p.stage.startswith("downloading") else
+                                (1000 if p.stage in ("merging video + audio", "adding metadata",
+                                                     "converting to MP3", "done") else 0))
+
     def _build_settings_tab(self) -> QWidget:
         w = QWidget()
         self.f_library = QLineEdit()
@@ -883,6 +1149,8 @@ class MainWindow(QMainWindow):
         self.f_ytdlsub = QLineEdit()
         self.f_ffmpeg = QLineEdit()
         self.f_ffprobe = QLineEdit()
+        self.f_ytdlp = QLineEdit()
+        self.f_ytdlp.setPlaceholderText("Used by the Quick download tab (installed by the button below)")
         self.f_deno = QLineEdit()
         self.f_deno.setPlaceholderText("JavaScript runtime yt-dlp needs for YouTube (installed by the button below)")
         self.f_quality = QComboBox()
@@ -906,7 +1174,8 @@ class MainWindow(QMainWindow):
         pf.addRow("ffmpeg.exe:", path_row(self.f_ffmpeg, w, "file", "ffmpeg", exe_filter))
         pf.addRow("ffprobe.exe:", path_row(self.f_ffprobe, w, "file", "ffprobe", exe_filter))
         pf.addRow("deno.exe:", path_row(self.f_deno, w, "file", "deno", exe_filter))
-        dl_btn = QPushButton("Download / update ytdl-sub, deno and ffmpeg")
+        pf.addRow("yt-dlp.exe:", path_row(self.f_ytdlp, w, "file", "yt-dlp", exe_filter))
+        dl_btn = QPushButton("Download / update ytdl-sub, yt-dlp, deno and ffmpeg")
         dl_btn.clicked.connect(self._download_tools)
         pf.addRow("", dl_btn)
 
@@ -992,6 +1261,7 @@ class MainWindow(QMainWindow):
         self.f_ffmpeg.setText(s.ffmpeg_path)
         self.f_ffprobe.setText(s.ffprobe_path)
         self.f_deno.setText(s.deno_path)
+        self.f_ytdlp.setText(s.ytdlp_path)
         self.f_quality.setCurrentText(s.quality)
         self.f_cookies.setText(s.cookies_file)
         self.f_cookie_browser.setCurrentIndex(max(0, self.f_cookie_browser.findData(s.cookies_browser)))
@@ -1018,6 +1288,7 @@ class MainWindow(QMainWindow):
         s.ffmpeg_path = self.f_ffmpeg.text().strip()
         s.ffprobe_path = self.f_ffprobe.text().strip()
         s.deno_path = self.f_deno.text().strip()
+        s.ytdlp_path = self.f_ytdlp.text().strip()
         s.quality = self.f_quality.currentText()
         s.cookies_file = self.f_cookies.text().strip()
         s.cookies_browser = self.f_cookie_browser.currentData() or ""
@@ -1113,7 +1384,7 @@ class MainWindow(QMainWindow):
         else:
             self.state.save()
             self._load_settings_into_form()
-            QMessageBox.information(self, "Done", "ytdl-sub, deno and ffmpeg are installed.")
+            QMessageBox.information(self, "Done", "ytdl-sub, yt-dlp, deno and ffmpeg are installed.")
 
     # ---- startup
     def _first_run_check(self):
@@ -1131,12 +1402,13 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32" and not (s.ytdlsub_path and s.deno_path):
             if QMessageBox.question(
                 self, "Welcome",
-                "ytdl-sub, deno and ffmpeg aren't set up yet.\n\nDownload them now (about 200 MB)?"
+                "ytdl-sub, yt-dlp, deno and ffmpeg aren't set up yet.\n\nDownload them now (about 200 MB)?"
             ) == QMessageBox.Yes:
                 self._download_tools()
 
     def closeEvent(self, event):
-        if self.proc is not None and QMessageBox.question(
+        busy = self.proc is not None or self.q_proc is not None
+        if busy and QMessageBox.question(
             self, "Download running", "A download is still running. Stop it and quit?"
         ) != QMessageBox.Yes:
             event.ignore()
@@ -1146,6 +1418,11 @@ class MainWindow(QMainWindow):
             runner.kill_tree(self.proc.processId())
             self.proc.kill()
             self.proc.waitForFinished(3000)
+        if self.q_proc is not None:
+            self.q_current["status"] = "cancelled"
+            runner.kill_tree(self.q_proc.processId())
+            self.q_proc.kill()
+            self.q_proc.waitForFinished(3000)
         self._save_settings_from_form()
         event.accept()
 
