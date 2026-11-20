@@ -571,6 +571,9 @@ class MainWindow(QMainWindow):
         self.progress = runner.ProgressTracker()
         self._size_cache: dict[str, Path | None] = {}
         self._last_bytes: tuple[float, int] | None = None
+        self.cooldown_timer = QTimer(self)
+        self.cooldown_timer.setInterval(1000)
+        self.cooldown_timer.timeout.connect(self._tick_cooldown)
         self.p_timer = QTimer(self)
         self.p_timer.setInterval(1000)
         self.p_timer.timeout.connect(self._render_progress)
@@ -636,8 +639,8 @@ class MainWindow(QMainWindow):
             sb.setValue(sb.maximum())
 
     def _start_run(self, dry_run: bool, selected_only: bool = False):
-        if self.proc is not None:
-            QMessageBox.information(self, "Busy", "A download is already running.")
+        if self.proc is not None or self.cooldown_timer.isActive():
+            QMessageBox.information(self, "Busy", "A download is already running (or waiting to resume).")
             return
         self._save_settings_from_form()
         errors = configgen.validate(self.state)
@@ -664,11 +667,14 @@ class MainWindow(QMainWindow):
         self._stopped = False
         self._batch = 0
         self._size_cache = {}
+        self._block_waits = 0
         self._launch(match)
 
     def _launch(self, match: list[str] | None):
         """Start one ytdl-sub invocation (one batch)."""
         self._batch += 1
+        self._current_match = match
+        self._block_stop = False
         self.progress = runner.ProgressTracker()
         self._last_bytes = None
         self.p_timer.start()
@@ -707,6 +713,14 @@ class MainWindow(QMainWindow):
         self.tracker.feed(text)
         self.progress.feed(text)
         self._log_write(text)
+        s = self.state.settings
+        if self.tracker.blocked and s.pause_on_block and not self._block_stop and not self._dry:
+            # yt-dlp would carry on with older videos; stop so the order is kept
+            self._block_stop = True
+            self._log_write(f"\n=== YouTube is blocking requests: {self.tracker.blocked}\n"
+                            "=== Stopping now so it doesn't skip ahead to older videos.\n")
+            runner.kill_tree(self.proc.processId())
+            self.proc.kill()
 
     def _proc_error(self, err):
         if err == QProcess.FailedToStart:
@@ -721,13 +735,50 @@ class MainWindow(QMainWindow):
         self.proc.deleteLater()
         self.proc = None
 
+        s = self.state.settings
+        if self._block_stop and not self._stopped:
+            self._block_waits += 1
+            if self._block_waits <= max(0, s.block_max_retries):
+                self._start_cooldown()
+                return
+            self._log_write(f"\n=== Still blocked after {self._block_waits - 1} waits; "
+                            "giving up until the next run.\n")
+            self._finish_run()
+            return
+        self._block_waits = 0
+
         # 'Everything' channels that stopped at their batch limit: run the next batch.
         if not self._dry and not self._stopped and self._batch < runner.MAX_BATCHES:
             more = self.tracker.next_batch(self.state)
             if more:
                 self._launch(more)
                 return
+        self._finish_run()
 
+    def _start_cooldown(self):
+        minutes = max(1, self.state.settings.block_cooldown_min)
+        self._resume_at = time.monotonic() + minutes * 60
+        self._batch -= 1  # the blocked attempt doesn't count as a batch
+        self._log_write(f"=== Waiting {minutes} minutes, then trying the same channels again "
+                        f"(wait {self._block_waits} of {self.state.settings.block_max_retries}). "
+                        "Press Stop to cancel.\n")
+        self.cooldown_timer.start()
+        self._tick_cooldown()
+
+    def _tick_cooldown(self):
+        left = int(self._resume_at - time.monotonic())
+        if left <= 0:
+            self.cooldown_timer.stop()
+            self._log_write("\n=== Trying again\n")
+            self._launch(self._current_match)  # newest-first, so the blocked videos come first
+            return
+        self.progress.current = None
+        self.progress.stage = (f"Paused: YouTube is blocking requests. Trying again in "
+                               f"{left // 60}:{left % 60:02d} (wait {self._block_waits} of "
+                               f"{self.state.settings.block_max_retries})")
+        self._render_progress()
+
+    def _finish_run(self):
         if self.log_file:
             self.log_file.close()
             self.log_file = None
@@ -746,6 +797,12 @@ class MainWindow(QMainWindow):
             threading.Thread(target=work, daemon=True).start()
 
     def _stop_run(self):
+        if self.proc is None and self.cooldown_timer.isActive():
+            self.cooldown_timer.stop()
+            self._stopped = True
+            self._log_write("\n=== Stopped while waiting\n")
+            self._finish_run()
+            return
         if self.proc:
             self._stopped = True
             self._log_write("\nStopping… (videos already moved into the library are kept)\n")
@@ -870,6 +927,26 @@ class MainWindow(QMainWindow):
         df.addRow("", self.f_autoupdate)
         self.f_infojson = QCheckBox("Keep a .info.json file next to each video (raw YouTube metadata; not used by Jellyfin)")
         df.addRow("", self.f_infojson)
+        self.f_block = QCheckBox("When YouTube blocks or rate-limits, stop and wait instead of skipping ahead")
+        self.f_block.setToolTip("On 'Sign in to confirm you're not a bot' or 'rate-limited' errors, ytdl-sub would\n"
+                                "carry on with older videos. Instead, stop, wait, and resume in order.")
+        self.f_block_min = QSpinBox()
+        self.f_block_min.setRange(5, 720)
+        self.f_block_min.setSuffix(" min")
+        self.f_block_tries = QSpinBox()
+        self.f_block_tries.setRange(0, 20)
+        self.f_block_tries.setSuffix(" waits per run")
+        brow = QWidget()
+        bl = QHBoxLayout(brow)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.addWidget(QLabel("Wait"))
+        bl.addWidget(self.f_block_min)
+        bl.addWidget(QLabel("before retrying, up to"))
+        bl.addWidget(self.f_block_tries)
+        bl.addStretch(1)
+        df.addRow("", self.f_block)
+        df.addRow("", brow)
+        self.f_block.toggled.connect(brow.setEnabled)
         self.f_chapters = QCheckBox("Embed chapter markers (an extra rewrite of each video that has chapters)")
         df.addRow("", self.f_chapters)
 
@@ -922,6 +999,9 @@ class MainWindow(QMainWindow):
         self.f_autoupdate.setChecked(s.auto_update_ytdlsub)
         self.f_chapters.setChecked(s.embed_chapters)
         self.f_infojson.setChecked(s.keep_info_json)
+        self.f_block.setChecked(s.pause_on_block)
+        self.f_block_min.setValue(s.block_cooldown_min)
+        self.f_block_tries.setValue(s.block_max_retries)
         self.f_maxdl.setValue(s.max_downloads_per_run)
         self.f_jf_enabled.setChecked(s.jellyfin_refresh)
         self.f_jf_url.setText(s.jellyfin_url)
@@ -945,6 +1025,9 @@ class MainWindow(QMainWindow):
         s.auto_update_ytdlsub = self.f_autoupdate.isChecked()
         s.embed_chapters = self.f_chapters.isChecked()
         s.keep_info_json = self.f_infojson.isChecked()
+        s.pause_on_block = self.f_block.isChecked()
+        s.block_cooldown_min = self.f_block_min.value()
+        s.block_max_retries = self.f_block_tries.value()
         s.max_downloads_per_run = self.f_maxdl.value()
         s.jellyfin_refresh = self.f_jf_enabled.isChecked()
         s.jellyfin_url = self.f_jf_url.text().strip()

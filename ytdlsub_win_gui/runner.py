@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -18,6 +19,12 @@ CREATE_NO_WINDOW = 0x08000000  # don't flash a console window from the scheduled
 # Safety cap on back-to-back batches in one run (5 videos x 400 = 2000 videos).
 MAX_BATCHES = 400
 
+# YouTube refusing service (as opposed to one video being unavailable). yt-dlp keeps going
+# with older videos after these, so batches would skip ahead; the app stops and waits instead.
+_BLOCK_RE = re.compile(
+    r"confirm you.{0,3}re not a bot|rate-limited|rate limited|HTTP Error 429|Too Many Requests",
+    re.IGNORECASE,
+)
 _BEGIN_RE = re.compile(r"Beginning subscription \S+ for (.+?)\s*$")
 _NO_CHANGE_RE = re.compile(r"^No files changed for (.+?)\s*$")
 
@@ -30,6 +37,7 @@ class BatchTracker:
         self.current: str | None = None
         self.truncated: set[str] = set()
         self.unchanged: set[str] = set()
+        self.blocked: str | None = None  # first YouTube block/rate-limit error line seen
         self._partial = ""
 
     def feed(self, text: str) -> None:
@@ -39,6 +47,8 @@ class BatchTracker:
             self._line(line)
 
     def _line(self, line: str) -> None:
+        if self.blocked is None and "ERROR" in line and _BLOCK_RE.search(line):
+            self.blocked = line.strip()
         if m := _BEGIN_RE.search(line):
             self.current = m.group(1)
         elif "MaxDownloadsReached" in line and self.current:
@@ -164,10 +174,14 @@ def run_headless() -> int:
         flags = CREATE_NO_WINDOW if sys.platform == "win32" else 0
         match: list[str] | None = None
         code = 0
-        for batch in range(1, MAX_BATCHES + 1):
+        s = state.settings
+        blocks_in_a_row = 0
+        batch = 0
+        while batch < MAX_BATCHES:
+            batch += 1
             cmd = build_command(state, match=match)
             if batch > 1:
-                say(f"--- Batch {batch}: continuing full archive for {', '.join(match or [])} ---")
+                say(f"--- Batch {batch}: {', '.join(match) if match else 'all channels'} ---")
             say("Running: " + subprocess.list2cmdline(cmd))
             tracker = BatchTracker()
             proc = subprocess.Popen(
@@ -175,18 +189,35 @@ def run_headless() -> int:
                 stdin=subprocess.DEVNULL, creationflags=flags, env=child_env(),
             )
             assert proc.stdout is not None
+            stopped_for_block = False
             for raw in proc.stdout:
                 text = raw.decode("utf-8", errors="replace")
                 tracker.feed(text)
                 log.write(text)
                 log.flush()
+                if tracker.blocked and s.pause_on_block and not stopped_for_block:
+                    stopped_for_block = True
+                    say(f"YouTube is blocking requests: {tracker.blocked}")
+                    say("Stopping now so ytdl-sub doesn't skip ahead to older videos.")
+                    kill_tree(proc.pid)
             code = proc.wait()
             say(f"ytdl-sub exited with code {code}")
+            if stopped_for_block:
+                blocks_in_a_row += 1
+                if blocks_in_a_row > max(0, s.block_max_retries):
+                    say(f"Still blocked after {blocks_in_a_row - 1} waits; giving up until the next run.")
+                    break
+                mins = max(1, s.block_cooldown_min)
+                say(f"Waiting {mins} minute{'s' if mins != 1 else ''} before trying again "
+                    f"(wait {blocks_in_a_row} of {s.block_max_retries}).")
+                time.sleep(mins * 60)
+                batch -= 1  # the blocked attempt doesn't count as a batch
+                continue    # same channels again; newest-first, so the blocked videos come first
+            blocks_in_a_row = 0
             match = tracker.next_batch(state)
             if not match:
                 break
 
-        s = state.settings
         if s.jellyfin_refresh and s.jellyfin_api_key:
             try:
                 say(refresh_jellyfin(s.jellyfin_url, s.jellyfin_api_key))

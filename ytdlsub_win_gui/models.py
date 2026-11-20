@@ -211,6 +211,11 @@ class Settings:
     auto_update_ytdlsub: bool = True  # YouTube changes often; stale yt-dlp breaks downloads
     embed_chapters: bool = True  # chapter markers; costs one extra rewrite of videos that have chapters
     keep_info_json: bool = False  # <video>.info.json next to each video (raw YouTube metadata)
+    # When YouTube blocks/rate-limits ("confirm you're not a bot", HTTP 429), stop instead of
+    # skipping ahead to older videos, wait, then resume where it stopped.
+    pause_on_block: bool = True
+    block_cooldown_min: int = 60
+    block_max_retries: int = 3
     schedule_enabled: bool = False
     schedule_time: str = "03:00"
     jellyfin_refresh: bool = False
