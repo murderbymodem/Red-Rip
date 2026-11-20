@@ -201,6 +201,9 @@ class Settings:
     ffmpeg_path: str = ""
     ffprobe_path: str = ""
     deno_path: str = ""          # JS runtime yt-dlp needs for YouTube
+    ytdlp_path: str = ""         # yt-dlp.exe, used by the Quick download tab
+    quick_folder: str = ""       # Quick download destination; blank = the user's Downloads folder
+    quick_quality: str = "best"
     library_dir: str = ""        # Jellyfin "Shows" library folder
     working_dir: str = ""        # temp download dir; blank = inside app dir
     quality: str = "Max 1080p"
@@ -266,7 +269,8 @@ class AppState:
         exe = ".exe" if sys.platform == "win32" else ""
         s = self.settings
         for attr, name in (("ytdlsub_path", "ytdl-sub"), ("ffmpeg_path", "ffmpeg"),
-                           ("ffprobe_path", "ffprobe"), ("deno_path", "deno")):
+                           ("ffprobe_path", "ffprobe"), ("deno_path", "deno"),
+                           ("ytdlp_path", "yt-dlp")):
             if not getattr(s, attr):
                 candidate = bin_dir() / f"{name}{exe}"
                 if candidate.exists():
