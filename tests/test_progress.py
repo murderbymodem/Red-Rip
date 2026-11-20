@@ -56,3 +56,25 @@ def test_download_size_helpers(tmp_path):
     assert runner.find_info_json(tmp_path, "Missing") is None
     assert runner.expected_size(info) == 400
     assert runner.downloaded_bytes(info) == 200
+
+
+def test_block_detection():
+    blocking = [
+        "[ytdl-sub:yt-dlp] ERROR: [youtube] abc: Sign in to confirm you’re not a bot. Use --cookies",
+        "[ytdl-sub:yt-dlp] ERROR: [youtube] abc: Sign in to confirm you�re not a bot.",  # garbled apostrophe
+        "[ytdl-sub:yt-dlp] ERROR: [youtube] abc: The current session has been rate-limited by YouTube for up to an hour",
+        "[ytdl-sub:yt-dlp] ERROR: unable to download video data: HTTP Error 429: Too Many Requests",
+    ]
+    for line in blocking:
+        t = runner.BatchTracker()
+        t.feed(line + "\n")
+        assert t.blocked, line
+    not_blocking = [
+        "[ytdl-sub:yt-dlp] ERROR: [youtube] abc: Private video. Sign in if you've been granted access",
+        "[ytdl-sub:yt-dlp] ERROR: [youtube] abc: Join this channel to get access to members-only content",
+        "[ytdl-sub:yt-dlp] WARNING: [youtube] HTTP Error 429: Too Many Requests. Retrying (1/3)...",  # recovers
+    ]
+    for line in not_blocking:
+        t = runner.BatchTracker()
+        t.feed(line + "\n")
+        assert t.blocked is None, line

@@ -150,6 +150,10 @@ The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl
 
 ## Tips
 
+- When YouTube blocks or rate-limits (bot check, "rate-limited", HTTP 429), ytdl-sub would carry on with older
+  videos, so batches would skip ahead. The app stops instead, waits (default 60 minutes, shown in the Current batch
+  panel), and resumes with the blocked videos first, up to 3 times per run (Settings). Unavailable or members-only
+  videos are still just skipped.
 - If YouTube shows "Sign in to confirm you're not a bot", give yt-dlp a signed-in YouTube session. Easiest:
   sign in to YouTube in Firefox and pick **Settings → Cookies from browser → Firefox**. Chrome/Edge must be fully
   closed and newer versions often can't be read; for those, export a `cookies.txt` instead (yt-dlp's wiki
