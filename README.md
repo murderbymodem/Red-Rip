@@ -8,7 +8,7 @@ and it fetches new videos every day into a Jellyfin-ready TV library. It writes 
 Not affiliated with the ytdl-sub or yt-dlp projects, and not the same as ytdl-sub's own `ytdl-sub-gui`
 container image (a web-based config editor). Red-Rip was previously named ytdl-sub-win-gui.
 
-<img width="775" height="818" alt="Red-Rip main window" src="https://github.com/user-attachments/assets/7c04e767-b1ee-4b5b-ac81-fee14f77f13c" />
+<img width="805" height="950" alt="Red-Rip_IdhYzaWYfd" src="https://github.com/user-attachments/assets/31b53472-7646-47c1-8be8-e7194a229d72" />
 
 ## Features
 
