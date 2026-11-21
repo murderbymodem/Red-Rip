@@ -68,7 +68,7 @@ jobs:
           # Zip contains one top-level folder, so extracting always gives the app its own folder
           # (it creates its data folder next to the .exe).
           $label = if ($env:LABEL.Length -eq 40) { $env:LABEL.Substring(0, 7) } else { $env:LABEL }
-          $zipName = "Red-Rip-$label.zip"
+          $zipName = "Red-Rip-$label-exe.zip"
           $folder = "package\Red-Rip"
           New-Item -ItemType Directory -Force $folder | Out-Null
           Copy-Item dist\Red-Rip.exe, LICENSE, README.md $folder

@@ -81,11 +81,11 @@ container image (a web-based config editor). Red-Rip was previously named ytdl-s
 
 All downloads are on the [Releases page](https://github.com/murderbymodem/red-rip/releases). No Python needed.
 
-**Windows:** download `Red-Rip-<version>.zip`, extract it anywhere (for example
+**Windows:** download `Red-Rip-<version>-exe.zip`, extract it anywhere (for example
 `C:\`), and run `Red-Rip\Red-Rip.exe`. The zip contains a single `Red-Rip` folder
 because the app creates its `data` folder next to the `.exe` and should have a folder of its own.
 
-**Linux:** download `Red-Rip-<version>-x86_64.AppImage`, make it executable (in Dolphin: Properties →
+**Linux:** download `Red-Rip-<version>-appimg-x86_64.AppImage`, make it executable (in Dolphin: Properties →
 Permissions → *Is executable*, or `chmod +x Red-Rip-*.AppImage`), and run it. See [Linux and KDE Plasma](#linux-and-kde-plasma).
 
 Each release is built from this repository's source by GitHub Actions (see the build log linked from the
@@ -203,7 +203,7 @@ The scheduled task is named **"Red-Rip daily download"**. It runs `Red-Rip.exe -
 2. On GitHub: **Releases → Draft a new release**, create a new tag such as `v0.1.2` on `main` (`0.1.2` without
    the `v` works too), write notes (or use **Generate release notes**), and **Publish**.
 3. The Build workflow runs for that tag, builds the app with that version number, and attaches
-   `Red-Rip-<tag>.zip` and `SHA256SUMS.txt` to the release within a few minutes.
+   `Red-Rip-<tag>-exe.zip` (Windows), `Red-Rip-<tag>-appimg-x86_64.AppImage` (Linux) and `SHA256SUMS.txt` to the release within a few minutes.
 
 The version in `redrip/__init__.py` is only used when running from source; release builds take it
 from the tag. Always use a new tag: re-using a deleted release's tag rebuilds that tag's old commit.

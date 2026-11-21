@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Red-Rip-<version>-<arch>.AppImage (Linux). Needs: Python with requirements.txt +
+# Builds Red-Rip-<version>-appimg-<arch>.AppImage (Linux). Needs: Python with requirements.txt +
 # pyinstaller installed, and internet access to fetch appimagetool on first use.
 #   tools/build_appimage.sh [version-label]      e.g. tools/build_appimage.sh v0.1.6
 set -euo pipefail
@@ -43,6 +43,6 @@ if [ ! -x "$TOOL" ]; then
   curl -fsSL -o "$TOOL" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$ARCH.AppImage"
   chmod +x "$TOOL"
 fi
-TARGET="$OUT/Red-Rip-$LABEL-$ARCH.AppImage"
+TARGET="$OUT/Red-Rip-$LABEL-appimg-$ARCH.AppImage"
 ARCH="$ARCH" "$TOOL" --appimage-extract-and-run --no-appstream "$APPDIR" "$TARGET"
 echo "Built: $TARGET"
