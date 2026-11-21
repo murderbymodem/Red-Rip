@@ -80,11 +80,35 @@ def kill_tree(pid: int) -> None:
     if sys.platform == "win32":
         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
                        capture_output=True, creationflags=CREATE_NO_WINDOW)
-    else:
+        return
+    # Linux: the same launcher + worker split (PyInstaller one-file), so kill all descendants
+    for p in [*_descendants(pid), pid]:
         try:
-            os.kill(pid, 9)
+            os.kill(p, 9)
         except OSError:
             pass
+
+
+def _descendants(pid: int) -> list[int]:
+    """All child processes of pid (via /proc), deepest first."""
+    children: dict[int, list[int]] = {}
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            stat = (d / "stat").read_text()
+            ppid = int(stat[stat.rindex(")") + 2:].split()[1])  # comm can contain spaces
+        except (OSError, ValueError, IndexError):
+            continue
+        children.setdefault(ppid, []).append(int(d.name))
+    out: list[int] = []
+
+    def walk(p: int) -> None:
+        for c in children.get(p, []):
+            walk(c)
+            out.append(c)
+    walk(pid)
+    return out
 
 
 def build_command(state: AppState, dry_run: bool = False, match: list[str] | None = None) -> list[str]:
@@ -156,7 +180,7 @@ def run_headless() -> int:
                     state.save()
             except Exception as exc:  # update failure must not block the run
                 say(f"ytdl-sub auto-update failed (continuing with current version): {exc}")
-        if sys.platform == "win32" and not state.settings.deno_path:
+        if not state.settings.deno_path:
             try:
                 from . import tools
                 state.settings.deno_path = str(tools.download_deno())
