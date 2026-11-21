@@ -296,7 +296,7 @@ class MainWindow(QMainWindow):
         self.log_file = None
         self._tools_thread = None
         self._tools_dlg = None
-        self.setWindowTitle(f"ytdl-sub-win-gui {__version__} — YouTube to Jellyfin")
+        self.setWindowTitle(f"Red-Rip {__version__} — YouTube to Jellyfin")
         self.resize(1050, 720)
 
         tabs = QTabWidget()
@@ -1250,6 +1250,18 @@ class MainWindow(QMainWindow):
         lay.addWidget(dl)
         lay.addWidget(jf)
         lay.addStretch(1)
+        credits = QLabel(
+            f"Red-Rip {__version__} · "
+            '<a href="https://github.com/murderbymodem/red-rip">github.com/murderbymodem/red-rip</a><br>'
+            'Built on <a href="https://github.com/jmbannon/ytdl-sub">ytdl-sub</a> and '
+            '<a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>, with '
+            '<a href="https://ffmpeg.org">FFmpeg</a> and <a href="https://deno.com">Deno</a>. '
+            "Not affiliated with those projects.")
+        credits.setTextFormat(Qt.RichText)
+        credits.setOpenExternalLinks(True)
+        credits.setWordWrap(True)
+        credits.setStyleSheet("color: gray;")
+        lay.addWidget(credits)
         lay.addLayout(bl)
         return w
 
@@ -1470,7 +1482,7 @@ def _set_windows_app_id() -> None:
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("murderbymodem.ytdl-sub-win-gui")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("murderbymodem.Red-Rip")
         except Exception:
             pass
 
@@ -1479,7 +1491,7 @@ def run_gui() -> int:
     _install_crash_logging()
     _set_windows_app_id()  # must happen before any window exists
     app = QApplication(sys.argv)
-    app.setApplicationName("ytdl-sub-win-gui")
+    app.setApplicationName("Red-Rip")
     if icon_path().exists():
         app.setWindowIcon(QIcon(str(icon_path())))  # title bar, taskbar, and every dialog
     win = MainWindow()

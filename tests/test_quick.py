@@ -3,8 +3,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ytdlsub_win_gui import quick, runner  # noqa: E402
-from ytdlsub_win_gui.models import Settings  # noqa: E402
+from redrip import quick, runner  # noqa: E402
+from redrip.models import Settings  # noqa: E402
 
 
 def test_build_command():

@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ytdlsub_win_gui import runner  # noqa: E402
+from redrip import runner  # noqa: E402
 
 OUTPUT = """[ytdl-sub] Beginning subscription download for Example VOD Archive\r
 [ytdl-sub:yt-dlp] [download] Downloading playlist: Example VOD Archive - Videos\r

@@ -7,8 +7,8 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-APP_NAME = "ytdl-sub-win-gui"
-OLD_APP_NAMES = ["ytdl-sub-gui"]  # earlier name of this app
+APP_NAME = "Red-Rip"
+OLD_APP_NAMES = ["ytdl-sub-win-gui", "ytdl-sub-gui"]  # earlier names of this app, newest first
 
 QUALITY_PRESETS = [
     "Max Video Quality",

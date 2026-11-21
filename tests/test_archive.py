@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ytdlsub_win_gui import archive  # noqa: E402
-from ytdlsub_win_gui.models import AppState, Subscription  # noqa: E402
+from redrip import archive  # noqa: E402
+from redrip.models import AppState, Subscription  # noqa: E402
 
 
 def make_library(tmp_path):

@@ -1,5 +1,5 @@
 @echo off
-REM Builds dist\ytdl-sub-win-gui.exe (single file, no console window).
+REM Builds dist\Red-Rip.exe (single file, no console window).
 REM Needs Python 3.10 - 3.13 (PySide6/PyYAML ship prebuilt Windows wheels for these).
 REM Very new Pythons (3.14+) may have no wheels yet and fail asking for "Visual C++ 14.0".
 setlocal
@@ -31,9 +31,9 @@ if not exist .venv (
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install --only-binary=:all: -r requirements.txt pyinstaller || goto :error
-pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py || goto :error
+pyinstaller --noconfirm --clean --onefile --windowed --name Red-Rip --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py || goto :error
 echo.
-echo Built: %CD%\dist\ytdl-sub-win-gui.exe
+echo Built: %CD%\dist\Red-Rip.exe
 exit /b 0
 :error
 echo Build failed.

@@ -1,14 +1,14 @@
-# ytdl-sub-win-gui
-Windows GUI for ytdl-sub written in Python focused on YouTube to Jellyfin functionality
+# Red-Rip
+A Windows app that downloads YouTube channels into a Jellyfin library, on a schedule.
 
-An unofficial Windows desktop app on top of [ytdl-sub](https://github.com/jmbannon/ytdl-sub).
-Add YouTube channels, choose how much to download, and it will fetch new videos
-every day into a Jellyfin-ready TV library. It writes ytdl-sub's YAML for you.
+Red-Rip is an unofficial desktop frontend for [ytdl-sub](https://github.com/jmbannon/ytdl-sub), which does the
+downloading with [yt-dlp](https://github.com/yt-dlp/yt-dlp). Add YouTube channels, choose how much to download,
+and it fetches new videos every day into a Jellyfin-ready TV library. It writes ytdl-sub's YAML for you.
 
-Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui` container image
-(a web-based config editor).
+Not affiliated with the ytdl-sub or yt-dlp projects, and not the same as ytdl-sub's own `ytdl-sub-gui`
+container image (a web-based config editor). Red-Rip was previously named ytdl-sub-win-gui.
 
-<img width="775" height="818" alt="ytdl-sub-win-gui_2WovSnTUpi" src="https://github.com/user-attachments/assets/7c04e767-b1ee-4b5b-ac81-fee14f77f13c" />
+<img width="775" height="818" alt="Red-Rip main window" src="https://github.com/user-attachments/assets/7c04e767-b1ee-4b5b-ac81-fee14f77f13c" />
 
 ## Features
 
@@ -79,9 +79,9 @@ Not affiliated with the ytdl-sub project, and not the same as its `ytdl-sub-gui`
 
 ## Download
 
-Download `ytdl-sub-win-gui-<version>.zip` from the
-[Releases page](https://github.com/murderbymodem/ytdl-sub-win-gui/releases), extract it anywhere (for example
-`C:\`), and run `ytdl-sub-win-gui\ytdl-sub-win-gui.exe`. The zip contains a single `ytdl-sub-win-gui` folder
+Download `Red-Rip-<version>.zip` from the
+[Releases page](https://github.com/murderbymodem/red-rip/releases), extract it anywhere (for example
+`C:\`), and run `Red-Rip\Red-Rip.exe`. The zip contains a single `Red-Rip` folder
 because the app creates its `data` folder next to the `.exe` and should have a folder of its own. No Python needed.
 
 Each release is built from this repository's source by GitHub Actions (see the build log linked from the
@@ -98,7 +98,7 @@ pip install -r requirements.txt
 python launcher.py
 ```
 
-As a standalone `.exe`: run `build.bat`. It produces `dist\ytdl-sub-win-gui.exe` (no console window, no Python needed on the target PC).
+As a standalone `.exe`: run `build.bat`. It produces `dist\Red-Rip.exe` (no console window, no Python needed on the target PC).
 
 First launch:
 1. Accept the prompt to download ytdl-sub and ffmpeg. You can also set the paths yourself in **Settings**.
@@ -107,9 +107,10 @@ First launch:
 4. Optional: click **Dry run** to check everything, then **Run now**.
 5. On **Run & Schedule**, tick *Download new videos automatically every day at…*, pick a time, and click **Apply schedule**.
 
-**Upgrading from the earlier name (`ytdl-sub-gui`):** put `ytdl-sub-win-gui.exe` in the same folder as the
-old `.exe` and delete the old one. The `data` folder (channels, settings, tools) is used as is. Open the app
-once: it replaces the old "ytdl-sub-gui daily download" scheduled task with the new one.
+**Upgrading from an earlier name (`ytdl-sub-win-gui` or `ytdl-sub-gui`):** put `Red-Rip.exe` in the same
+folder as the old `.exe` and delete the old one. The `data` folder (channels, settings, tools) is used as is.
+Open the app once: it replaces the old scheduled task ("ytdl-sub-win-gui daily download" or "ytdl-sub-gui
+daily download") with "Red-Rip daily download", keeping your schedule.
 
 ## Jellyfin setup
 
@@ -119,11 +120,11 @@ once: it replaces the old "ytdl-sub-gui daily download" scheduled task with the 
 
 ## How it works
 
-**Portable:** everything the app writes lives in a `data` folder next to `ytdl-sub-win-gui.exe`
+**Portable:** everything the app writes lives in a `data` folder next to `Red-Rip.exe`
 (or next to `launcher.py` when running from source):
 
 ```
-ytdl-sub-win-gui.exe
+Red-Rip.exe
 data\
     state.json          your channels and settings
     config.yaml, subscriptions.yaml   generated for ytdl-sub
@@ -133,7 +134,7 @@ data\
 ```
 
 To move or back up the app, copy the `.exe` together with its `data` folder. If the app folder
-isn't writable (e.g. under `C:\Program Files`), the app falls back to `%APPDATA%\ytdl-sub-win-gui`.
+isn't writable (e.g. under `C:\Program Files`), the app falls back to `%APPDATA%\Red-Rip`.
 Settings from older versions stored in `%APPDATA%` are copied into `data` automatically on first start.
 
 Before every run the app regenerates:
@@ -151,7 +152,7 @@ Before every run the app regenerates:
 
 Then it runs `ytdl-sub --config config.yaml sub subscriptions.yaml`. ytdl-sub keeps a download archive per show, so later runs only fetch videos it hasn't seen.
 
-The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl-sub-win-gui.exe --headless` as your user, while you're signed in. Logs go to `data\logs\`. If you move the app folder, click **Apply schedule** again so the task points to the new location.
+The scheduled task is named **"Red-Rip daily download"**. It runs `Red-Rip.exe --headless` as your user, while you're signed in. Logs go to `data\logs\`. If you move the app folder, click **Apply schedule** again so the task points to the new location.
 
 ## Tips
 
@@ -177,10 +178,24 @@ The scheduled task is named **"ytdl-sub-win-gui daily download"**. It runs `ytdl
 2. On GitHub: **Releases → Draft a new release**, create a new tag such as `v0.1.2` on `main` (`0.1.2` without
    the `v` works too), write notes (or use **Generate release notes**), and **Publish**.
 3. The Build workflow runs for that tag, builds the app with that version number, and attaches
-   `ytdl-sub-win-gui-<tag>.zip` and `SHA256SUMS.txt` to the release within a few minutes.
+   `Red-Rip-<tag>.zip` and `SHA256SUMS.txt` to the release within a few minutes.
 
-The version in `ytdlsub_win_gui/__init__.py` is only used when running from source; release builds take it
+The version in `redrip/__init__.py` is only used when running from source; release builds take it
 from the tag. Always use a new tag: re-using a deleted release's tag rebuilds that tag's old commit.
+
+## Credits
+
+Red-Rip is a frontend; the real work is done by these projects:
+
+- [ytdl-sub](https://github.com/jmbannon/ytdl-sub) by jmbannon (GPL-3.0): subscriptions, presets, Jellyfin
+  naming and metadata. Red-Rip generates its configuration and runs it.
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense): the downloader used by ytdl-sub and by the Quick
+  download tab.
+- [FFmpeg](https://ffmpeg.org) (merging and converting) and [Deno](https://deno.com) (the JavaScript runtime
+  yt-dlp uses for YouTube).
+
+Red-Rip downloads these tools from their official releases; it doesn't include or modify them.
+Red-Rip itself is licensed under GPL-3.0 (see `LICENSE`).
 
 ## Development
 
@@ -188,7 +203,7 @@ The app icon (`assets/icon.ico`, `assets/icon.png`) is generated by `tools/make_
 edit the colours or shapes there and run `python tools/make_icon.py` to regenerate it.
 
 ```
-ytdlsub_win_gui/
+redrip/
   models.py     settings + subscription dataclasses, JSON persistence
   configgen.py  state -> ytdl-sub config.yaml / subscriptions.yaml
   runner.py     command building, headless run, Jellyfin refresh

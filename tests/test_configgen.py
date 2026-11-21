@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ytdlsub_win_gui import configgen  # noqa: E402
-from ytdlsub_win_gui.models import (  # noqa: E402
+from redrip import configgen  # noqa: E402
+from redrip.models import (  # noqa: E402
     MODE_ALL, MODE_RECENT, AppState, Subscription,
 )
 
@@ -97,7 +97,7 @@ def test_files_load_in_ytdl_sub(tmp_path):
 
 
 def test_batch_tracker():
-    from ytdlsub_win_gui.runner import BatchTracker
+    from redrip.runner import BatchTracker
     st = AppState()
     st.subscriptions = [
         Subscription("Big", ["u"], mode=MODE_ALL),
