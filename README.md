@@ -1,5 +1,5 @@
 # Red-Rip
-A Windows app that downloads YouTube channels into a Jellyfin library, on a schedule.
+A Windows and Linux app that downloads YouTube channels into a Jellyfin library, on a schedule.
 
 Red-Rip is an unofficial desktop frontend for [ytdl-sub](https://github.com/jmbannon/ytdl-sub), which does the
 downloading with [yt-dlp](https://github.com/yt-dlp/yt-dlp). Add YouTube channels, choose how much to download,
@@ -79,14 +79,39 @@ container image (a web-based config editor). Red-Rip was previously named ytdl-s
 
 ## Download
 
-Download `Red-Rip-<version>.zip` from the
-[Releases page](https://github.com/murderbymodem/red-rip/releases), extract it anywhere (for example
+All downloads are on the [Releases page](https://github.com/murderbymodem/red-rip/releases). No Python needed.
+
+**Windows:** download `Red-Rip-<version>.zip`, extract it anywhere (for example
 `C:\`), and run `Red-Rip\Red-Rip.exe`. The zip contains a single `Red-Rip` folder
-because the app creates its `data` folder next to the `.exe` and should have a folder of its own. No Python needed.
+because the app creates its `data` folder next to the `.exe` and should have a folder of its own.
+
+**Linux:** download `Red-Rip-<version>-x86_64.AppImage`, make it executable (in Dolphin: Properties →
+Permissions → *Is executable*, or `chmod +x Red-Rip-*.AppImage`), and run it. See [Linux and KDE Plasma](#linux-and-kde-plasma).
 
 Each release is built from this repository's source by GitHub Actions (see the build log linked from the
-release), and the release lists SHA-256 checksums of the zip and the `.exe`. The `.exe` isn't code-signed, so Windows
+release), and the release lists SHA-256 checksums of every download in `SHA256SUMS.txt`. The `.exe` isn't code-signed, so Windows
 SmartScreen may warn on first launch ("Windows protected your PC" → **More info** → **Run anyway**).
+
+## Linux and KDE Plasma
+
+The AppImage bundles its own Qt (via PySide6) and runs on Plasma 5 and 6, under Wayland or X11, on most
+x86_64 distros from about 2022 on (no `libfuse2` needed).
+
+- **Looks native-ish:** the app uses Qt's Fusion style (a bundled Qt can't load the system's Breeze style),
+  coloured to follow Plasma's light/dark setting live. File dialogs are KDE's own, through
+  `xdg-desktop-portal-kde`, which Plasma installs by default.
+- **Taskbar and menu:** the window uses the Red-Rip icon in the Wayland taskbar. **Settings → Add Red-Rip to
+  the application menu** adds it to the launcher (pointing at the AppImage; add it again if you move the file).
+  AppImageLauncher or Gear Lever can do the same.
+- **Data:** settings, logs and downloaded tools are in `~/.local/share/Red-Rip` (an AppImage can't write
+  next to itself).
+- **Tools:** *Download / update…* fetches the Linux builds of ytdl-sub, yt-dlp and deno. If ffmpeg is
+  installed (most distros ship it: `ffmpeg` package), that copy is used instead of downloading one.
+  Tools already on your `PATH` are picked up automatically.
+- **Daily schedule:** a systemd user timer (`~/.config/systemd/user/red-rip.timer`) that runs while you're
+  logged in and catches up on a missed run when the PC is back on. To also run while logged out:
+  `loginctl enable-linger`. If you move the AppImage, click **Apply schedule** again.
+- **Cookies from browser:** Firefox works best; Chromium, Chrome and Brave must be closed.
 
 ## Running it
 
@@ -207,9 +232,14 @@ redrip/
   models.py     settings + subscription dataclasses, JSON persistence
   configgen.py  state -> ytdl-sub config.yaml / subscriptions.yaml
   runner.py     command building, headless run, Jellyfin refresh
-  scheduler.py  Windows Task Scheduler via PowerShell
-  tools.py      download ytdl-sub.exe / ffmpeg
+  scheduler.py  daily schedule: Windows Task Scheduler / systemd user timer
+  tools.py      download ytdl-sub, yt-dlp, deno, ffmpeg (Windows and Linux builds)
+  quick.py      Quick download tab (yt-dlp)
+  archive.py    ytdl-sub download history tools
+  oscompat.py   Windows/Linux differences, Linux desktop entry
   gui.py        PySide6 UI
+packaging/linux/  .desktop file for the AppImage
+tools/            make_icon.py, build_appimage.sh (Linux: tools/build_appimage.sh v1.2.3)
 tests/          pytest; also loads generated YAML in ytdl-sub if it's installed
 ```
 

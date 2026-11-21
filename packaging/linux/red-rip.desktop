@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Red-Rip
+GenericName=YouTube channel downloader
+Comment=Download YouTube channels into a Jellyfin library
+Exec=Red-Rip %U
+Icon=red-rip
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=youtube;jellyfin;download;ytdl-sub;yt-dlp;
+StartupWMClass=red-rip

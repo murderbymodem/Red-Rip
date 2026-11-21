@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Qt, QThread, QTime, QTimer, Signal, Slot
-from PySide6.QtGui import QFont, QIcon, QTextCursor
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox,
@@ -18,13 +18,21 @@ from PySide6.QtWidgets import (
     QTabWidget, QTimeEdit, QVBoxLayout, QWidget,
 )
 
-from . import __version__, archive, configgen, quick, runner, scheduler, tools
+from . import __version__, archive, configgen, oscompat, quick, runner, scheduler, tools
+from .oscompat import EXE, IS_LINUX, IS_WINDOWS
 from .models import (
     ARCHIVE_ORDERS, COOKIE_BROWSERS, DATE_SOURCES, FILE_NAMINGS, METADATA_MODES, CONTENT_RATINGS, MODE_RECENT, MODES, QUALITY_PRESETS, SEASON_ORDERINGS, AppState,
     Subscription, app_dir, logs_dir,
 )
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def mono_font() -> QFont:
+    if IS_WINDOWS:
+        return QFont("Consolas", 9)
+    f = QFontDatabase.systemFont(QFontDatabase.FixedFont)  # the desktop's monospace font (KDE: Hack)
+    return f
 
 
 def open_path(path: Path) -> None:
@@ -254,7 +262,7 @@ class TextViewer(QDialog):
         self.resize(820, 600)
         view = QPlainTextEdit(text)
         view.setReadOnly(True)
-        view.setFont(QFont("Consolas", 9))
+        view.setFont(mono_font())
         lay = QVBoxLayout(self)
         lay.addWidget(view)
         bb = QDialogButtonBox(QDialogButtonBox.Close)
@@ -511,7 +519,7 @@ class MainWindow(QMainWindow):
     # ---- Run & Schedule tab
     def _build_run_tab(self) -> QWidget:
         w = QWidget()
-        sched = QGroupBox("Daily schedule (Windows Task Scheduler)")
+        sched = QGroupBox(f"Daily schedule ({scheduler.backend_name()})")
         self.sched_enabled = QCheckBox("Download new videos automatically every day at")
         self.sched_time = QTimeEdit()
         self.sched_time.setDisplayFormat("HH:mm")
@@ -519,9 +527,13 @@ class MainWindow(QMainWindow):
         apply_btn.clicked.connect(self._apply_schedule)
         self.sched_status = QLabel()
         self.sched_status.setStyleSheet("color: gray;")
-        note = QLabel("Runs in the background while you're signed in to Windows — the app itself "
-                      "doesn't need to be open. If the PC was off or asleep, the run happens as soon "
-                      "as it's back.")
+        note = QLabel(
+            ("Runs in the background while you're signed in to Windows — the app itself "
+             "doesn't need to be open. If the PC was off or asleep, the run happens as soon "
+             "as it's back.") if IS_WINDOWS else
+            ("Runs in the background while you're logged in (a systemd user timer) — the app itself "
+             "doesn't need to be open. If the PC was off or asleep, the run happens as soon as it's "
+             "back. To also run while logged out: <code>loginctl enable-linger</code>."))
         note.setWordWrap(True)
         row = QHBoxLayout()
         row.addWidget(self.sched_enabled)
@@ -589,7 +601,7 @@ class MainWindow(QMainWindow):
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setFont(QFont("Consolas", 9))
+        self.log.setFont(mono_font())
         self.log.setMaximumBlockCount(20000)
 
         lay = QVBoxLayout(w)
@@ -963,7 +975,7 @@ class MainWindow(QMainWindow):
         brow.addWidget(open_dir)
         self.q_log = QPlainTextEdit()
         self.q_log.setReadOnly(True)
-        self.q_log.setFont(QFont("Consolas", 9))
+        self.q_log.setFont(mono_font())
         self.q_log.setMaximumBlockCount(5000)
 
         self.q_items: list[dict] = []
@@ -990,13 +1002,11 @@ class MainWindow(QMainWindow):
             return
         s = self.state.settings
         if not s.ytdlp_path or not Path(s.ytdlp_path).exists():
-            if sys.platform == "win32" and QMessageBox.question(
+            if QMessageBox.question(
                     self, "yt-dlp needed",
                     "Quick download uses yt-dlp, which isn't installed yet.\n\nDownload the tools now?"
             ) == QMessageBox.Yes:
                 self._download_tools()
-            elif sys.platform != "win32":
-                QMessageBox.information(self, "yt-dlp needed", "Set the yt-dlp path in Settings.")
             return
         folder = Path(self.q_folder.text().strip() or quick.default_folder())
         s.quick_folder = str(folder) if folder != quick.default_folder() else ""
@@ -1165,16 +1175,16 @@ class MainWindow(QMainWindow):
         self.f_maxdl.setToolTip("Applies to 'Only new videos' and 'Rolling window' channels. "
                                 "'Everything' channels use their own batch size instead.")
 
-        exe_filter = "Executables (*.exe);;All files (*)"
+        exe_filter = oscompat.exe_filter()
         paths = QGroupBox("Library && tools")
         pf = QFormLayout(paths)
         pf.addRow("Jellyfin library folder:", path_row(self.f_library, w, "dir", "Jellyfin library folder"))
         pf.addRow("Working folder:", path_row(self.f_working, w, "dir", "Working folder"))
-        pf.addRow("ytdl-sub.exe:", path_row(self.f_ytdlsub, w, "file", "ytdl-sub executable", exe_filter))
-        pf.addRow("ffmpeg.exe:", path_row(self.f_ffmpeg, w, "file", "ffmpeg", exe_filter))
-        pf.addRow("ffprobe.exe:", path_row(self.f_ffprobe, w, "file", "ffprobe", exe_filter))
-        pf.addRow("deno.exe:", path_row(self.f_deno, w, "file", "deno", exe_filter))
-        pf.addRow("yt-dlp.exe:", path_row(self.f_ytdlp, w, "file", "yt-dlp", exe_filter))
+        pf.addRow(f"ytdl-sub{EXE}:", path_row(self.f_ytdlsub, w, "file", "ytdl-sub executable", exe_filter))
+        pf.addRow(f"ffmpeg{EXE}:", path_row(self.f_ffmpeg, w, "file", "ffmpeg", exe_filter))
+        pf.addRow(f"ffprobe{EXE}:", path_row(self.f_ffprobe, w, "file", "ffprobe", exe_filter))
+        pf.addRow(f"deno{EXE}:", path_row(self.f_deno, w, "file", "deno", exe_filter))
+        pf.addRow(f"yt-dlp{EXE}:", path_row(self.f_ytdlp, w, "file", "yt-dlp", exe_filter))
         dl_btn = QPushButton("Download / update ytdl-sub, yt-dlp, deno and ffmpeg")
         dl_btn.clicked.connect(self._download_tools)
         pf.addRow("", dl_btn)
@@ -1241,6 +1251,11 @@ class MainWindow(QMainWindow):
         folder_btn.clicked.connect(lambda: open_path(app_dir()))
         bl = QHBoxLayout()
         bl.addWidget(save_btn)
+        if IS_LINUX and oscompat.appimage_path() is not None:
+            self.menu_btn = QPushButton()
+            self.menu_btn.clicked.connect(self._toggle_menu_entry)
+            self._update_menu_btn()
+            bl.addWidget(self.menu_btn)
         bl.addStretch(1)
         bl.addWidget(preview_btn)
         bl.addWidget(folder_btn)
@@ -1264,6 +1279,23 @@ class MainWindow(QMainWindow):
         lay.addWidget(credits)
         lay.addLayout(bl)
         return w
+
+    def _update_menu_btn(self):
+        exists = oscompat.desktop_entry_path().exists()
+        self.menu_btn.setText("Remove from application menu" if exists else "Add Red-Rip to the application menu")
+        self.menu_btn.setToolTip(f"Creates {oscompat.desktop_entry_path()} pointing at this AppImage, so Red-Rip "
+                                 "appears in the KDE launcher (and other desktops' menus). If you move the "
+                                 "AppImage, add it again.")
+
+    def _toggle_menu_entry(self):
+        try:
+            if oscompat.desktop_entry_path().exists():
+                oscompat.remove_desktop_entry()
+            else:
+                oscompat.install_desktop_entry(icon_path().with_suffix(".png"))
+        except Exception as exc:
+            QMessageBox.warning(self, "Application menu", f"Couldn't update the menu entry:\n{exc}")
+        self._update_menu_btn()
 
     def _load_settings_into_form(self):
         s = self.state.settings
@@ -1336,8 +1368,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Jellyfin", f"Connection failed:\n{exc}")
 
     def _download_tools(self):
-        if sys.platform != "win32":
-            QMessageBox.information(self, "Windows only", "Automatic download fetches Windows builds.")
+        if not (IS_WINDOWS or IS_LINUX):
+            QMessageBox.information(self, "Not available", "Automatic download supports Windows and Linux.")
             return
         if getattr(self, "_tools_thread", None) is not None:
             return  # already downloading
@@ -1411,10 +1443,11 @@ class MainWindow(QMainWindow):
                     self.log_line.emit(msg + "\n")
                     self._refresh_schedule_status()
             threading.Thread(target=migrate, daemon=True).start()
-        if sys.platform == "win32" and not (s.ytdlsub_path and s.deno_path):
+        if (IS_WINDOWS or IS_LINUX) and not (s.ytdlsub_path and s.deno_path):
+            size = "about 200 MB" if IS_WINDOWS or not s.ffmpeg_path else "about 100 MB; your system's ffmpeg is used"
             if QMessageBox.question(
                 self, "Welcome",
-                "ytdl-sub, yt-dlp, deno and ffmpeg aren't set up yet.\n\nDownload them now (about 200 MB)?"
+                f"ytdl-sub, yt-dlp, deno and ffmpeg aren't set up yet.\n\nDownload them now ({size})?"
             ) == QMessageBox.Yes:
                 self._download_tools()
 
@@ -1487,11 +1520,52 @@ def _set_windows_app_id() -> None:
             pass
 
 
+def _prepare_linux_qt() -> None:
+    """Before QApplication: the bundled Qt can't load KDE's own platform-theme plugin (it is
+    built against the system's Qt), so use the xdg-desktop-portal theme instead. On Plasma
+    that gives KDE's file dialogs and follows the light/dark colour scheme through
+    xdg-desktop-portal-kde. An explicit QT_QPA_PLATFORMTHEME from the user always wins."""
+    if IS_LINUX and not os.environ.get("QT_QPA_PLATFORMTHEME"):
+        os.environ["QT_QPA_PLATFORMTHEME"] = "xdgdesktopportal"
+
+
+def _dark_palette() -> QPalette:
+    p = QPalette()
+    window, base, text = QColor(42, 46, 50), QColor(32, 35, 38), QColor(252, 252, 252)  # Breeze Dark-ish
+    for role, color in ((QPalette.Window, window), (QPalette.WindowText, text), (QPalette.Base, base),
+                        (QPalette.AlternateBase, window), (QPalette.ToolTipBase, base),
+                        (QPalette.ToolTipText, text), (QPalette.Text, text), (QPalette.Button, window),
+                        (QPalette.ButtonText, text), (QPalette.BrightText, QColor(255, 80, 80)),
+                        (QPalette.Highlight, QColor(61, 174, 233)), (QPalette.HighlightedText, text),
+                        (QPalette.Link, QColor(61, 174, 233)), (QPalette.PlaceholderText, QColor(140, 145, 150))):
+        p.setColor(role, color)
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        p.setColor(QPalette.Disabled, role, QColor(110, 115, 120))
+    return p
+
+
+def _setup_linux_look(app: QApplication) -> None:
+    """Fusion (KDE's Breeze style plugin can't be loaded by a bundled Qt), coloured to match
+    the desktop's light/dark setting, and switching live when Plasma's setting changes."""
+    app.setDesktopFileName(oscompat.DESKTOP_ID)  # Wayland app id: KDE's taskbar uses our icon
+    app.setStyle("Fusion")
+    hints = app.styleHints()
+
+    def apply(*_):
+        dark = hints.colorScheme() == Qt.ColorScheme.Dark
+        app.setPalette(_dark_palette() if dark else app.style().standardPalette())
+    apply()
+    hints.colorSchemeChanged.connect(apply)
+
+
 def run_gui() -> int:
     _install_crash_logging()
     _set_windows_app_id()  # must happen before any window exists
+    _prepare_linux_qt()
     app = QApplication(sys.argv)
     app.setApplicationName("Red-Rip")
+    if IS_LINUX:
+        _setup_linux_look(app)
     if icon_path().exists():
         app.setWindowIcon(QIcon(str(icon_path())))  # title bar, taskbar, and every dialog
     win = MainWindow()

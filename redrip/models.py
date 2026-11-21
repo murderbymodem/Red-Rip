@@ -25,6 +25,7 @@ COOKIE_BROWSERS = {
     "chrome": "Chrome (must be fully closed; may fail on newer versions)",
     "edge": "Edge (must be fully closed; may fail on newer versions)",
     "brave": "Brave (must be fully closed)",
+    "chromium": "Chromium (must be fully closed)",
 }
 
 CONTENT_RATINGS = ["TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14", "TV-MA"]
@@ -131,8 +132,13 @@ def _migrate_legacy(portable: Path) -> None:
 
 
 def app_dir() -> Path:
-    """Portable data folder: <app folder>\\data. Falls back to %APPDATA% if not writable."""
+    """Windows: portable data folder <app folder>\\data (falls back to %APPDATA% if not
+    writable). Linux: ~/.local/share/Red-Rip (an AppImage's own folder is read-only)."""
     global _APP_DIR
+    if _APP_DIR is None and sys.platform.startswith("linux"):
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        _APP_DIR = Path(base) / APP_NAME
+        _APP_DIR.mkdir(parents=True, exist_ok=True)
     if _APP_DIR is None:
         portable = install_dir() / "data"
         if _is_writable(portable):
@@ -265,7 +271,9 @@ class AppState:
         tmp.replace(self.path())
 
     def apply_detected_defaults(self) -> None:
-        """Fill in tool paths if the bundled downloader put them in bin_dir()."""
+        """Fill in tool paths: copies the downloader put in bin_dir() first, then (Linux)
+        tools already installed on the system, e.g. the distro's ffmpeg."""
+        import shutil
         exe = ".exe" if sys.platform == "win32" else ""
         s = self.settings
         for attr, name in (("ytdlsub_path", "ytdl-sub"), ("ffmpeg_path", "ffmpeg"),
@@ -275,3 +283,5 @@ class AppState:
                 candidate = bin_dir() / f"{name}{exe}"
                 if candidate.exists():
                     setattr(s, attr, str(candidate))
+                elif sys.platform.startswith("linux") and (found := shutil.which(name)):
+                    setattr(s, attr, found)

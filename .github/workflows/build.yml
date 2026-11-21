@@ -1,8 +1,9 @@
 name: Build
 
-# Every push / pull request: run tests and build the .exe (downloadable as a workflow artifact).
+# Every push / pull request: run tests and build the Windows zip and the Linux AppImage
+# (downloadable as workflow artifacts).
 # Publishing a release on GitHub (Releases -> Draft a new release, tag like v0.1.0): the same
-# build runs for that tag and attaches the .exe and its checksum to the release.
+# builds run for that tag, then both files and SHA256SUMS.txt are attached to the release.
 on:
   push:
     branches: [main]
@@ -14,11 +15,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # File name label: the release tag, or the short commit for test builds
+  LABEL: ${{ github.event.release.tag_name || github.sha }}
+
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
-    permissions:
-      contents: write  # needed only to attach files to a published release
     steps:
       - uses: actions/checkout@v7
 
@@ -51,7 +54,7 @@ jobs:
           Get-Content redrip\__init__.py
 
       - name: Build .exe
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name Red-Rip --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name Red-Rip --icon assets/icon.ico --add-data "assets/icon.ico:assets" --add-data "assets/icon.png:assets" launcher.py
 
       - name: Smoke test the .exe
         shell: pwsh
@@ -61,48 +64,112 @@ jobs:
 
       - name: Package zip
         shell: pwsh
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           # Zip contains one top-level folder, so extracting always gives the app its own folder
           # (it creates its data folder next to the .exe).
-          $suffix = if ($env:TAG) { $env:TAG } else { "${{ github.sha }}".Substring(0, 7) }
-          $zipName = "Red-Rip-$suffix.zip"
+          $label = if ($env:LABEL.Length -eq 40) { $env:LABEL.Substring(0, 7) } else { $env:LABEL }
+          $zipName = "Red-Rip-$label.zip"
           $folder = "package\Red-Rip"
           New-Item -ItemType Directory -Force $folder | Out-Null
           Copy-Item dist\Red-Rip.exe, LICENSE, README.md $folder
-          Compress-Archive -Path $folder -DestinationPath "dist\$zipName" -Force
+          New-Item -ItemType Directory -Force out | Out-Null
+          Compress-Archive -Path $folder -DestinationPath "out\$zipName" -Force
           # Verify the layout: Red-Rip\Red-Rip.exe at the top of the zip
-          Expand-Archive "dist\$zipName" -DestinationPath check -Force
+          Expand-Archive "out\$zipName" -DestinationPath check -Force
           if (-not (Test-Path "check\Red-Rip\Red-Rip.exe")) { Write-Error "unexpected zip layout"; exit 1 }
-          "ZIP_NAME=$zipName" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-      - name: Checksum
-        shell: pwsh
-        run: |
-          $lines = foreach ($f in @("dist\$env:ZIP_NAME", "dist\Red-Rip.exe")) {
-            "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
-          }
-          $lines | Out-File -Encoding ascii dist\SHA256SUMS.txt
-          Get-Content dist\SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Red-Rip
-          path: |
-            dist/${{ env.ZIP_NAME }}
-            dist/SHA256SUMS.txt
+          name: Red-Rip-windows
+          path: out/*.zip
+
+  linux:
+    # Built on an older Ubuntu so the AppImage runs on older distros too (glibc is backward
+    # compatible, not forward).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          # Qt needs these to start (a Plasma desktop always has them); used by the smoke test
+          sudo apt-get update -q
+          sudo apt-get install -y -q libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run tests
+        run: QT_QPA_PLATFORM=offscreen python -m pytest -q tests
+
+      - name: Set app version from release tag
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${TAG#[vV]}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag '$TAG' isn't a version number. Use something like v0.1.2."; exit 1
+          fi
+          printf '__version__ = "%s"\n' "$version" > redrip/__init__.py
+          cat redrip/__init__.py
+
+      - name: Build AppImage
+        run: |
+          label="$LABEL"; [ ${#label} -eq 40 ] && label="${label:0:7}"
+          OUT_DIR=out tools/build_appimage.sh "$label"
+
+      - name: Smoke test the AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"   # no FUSE on the runner
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          app=$(ls out/*.AppImage)
+          "$app" --version
+          # The window must come up and keep running (timeout's exit code 124 = still running)
+          set +e; timeout 15 "$app"; code=$?; set -e
+          if [ "$code" -ne 124 ]; then echo "::error::the app exited early (code $code)"; exit 1; fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Red-Rip-linux
+          path: out/*.AppImage
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # attach files to the release
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: out
+          merge-multiple: true
 
       - name: Attach to release
-        if: github.event_name == 'release'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
         run: |
-          gh release upload "$env:TAG" "dist/$env:ZIP_NAME" dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
-          $zipSum = (Get-Content dist\SHA256SUMS.txt | Select-Object -First 1).Split(" ")[0]
-          $body = gh release view "$env:TAG" --json body --jq .body --repo "${{ github.repository }}"
-          $extra = "`n`n---`nDownload **$env:ZIP_NAME**, extract it, and run ``Red-Rip\Red-Rip.exe``.`n`nSHA-256 of $($env:ZIP_NAME): ``$zipSum`` (the .exe's checksum is in SHA256SUMS.txt)`nBuilt by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          Set-Content -Path notes.md -Value (($body -join "`n") + $extra) -Encoding utf8
-          gh release edit "$env:TAG" --notes-file notes.md --repo "${{ github.repository }}"
+          cd out
+          sha256sum *.zip *.AppImage | tee SHA256SUMS.txt
+          gh release upload "$TAG" ./*.zip ./*.AppImage SHA256SUMS.txt --clobber --repo "$REPO"
+          zip=$(ls *.zip); appimage=$(ls *.AppImage)
+          {
+            gh release view "$TAG" --json body --jq .body --repo "$REPO"
+            echo
+            echo "---"
+            echo "**Windows:** download **$zip**, extract it, and run \`Red-Rip\\Red-Rip.exe\`."
+            echo
+            echo "**Linux (KDE Plasma and others):** download **$appimage**, make it executable"
+            echo "(Properties → Permissions, or \`chmod +x\`), and run it."
+            echo
+            echo "SHA-256 checksums are in SHA256SUMS.txt."
+            echo "Built by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
+          } > notes.md
+          gh release edit "$TAG" --notes-file notes.md --repo "$REPO"
