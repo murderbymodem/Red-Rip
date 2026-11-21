@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Qt, QThread, QTime, QTimer, Signal, Slot
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QFont, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox,
@@ -1458,10 +1458,30 @@ def _install_crash_logging() -> None:
 _crash_file = None
 
 
+def icon_path() -> Path:
+    """assets/icon.ico from the source tree, or from inside the PyInstaller .exe."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    return base / "assets" / "icon.ico"
+
+
+def _set_windows_app_id() -> None:
+    """Own taskbar identity, so Windows shows our icon instead of grouping us under
+    a generic host (e.g. python.exe when running from source)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("murderbymodem.ytdl-sub-win-gui")
+        except Exception:
+            pass
+
+
 def run_gui() -> int:
     _install_crash_logging()
+    _set_windows_app_id()  # must happen before any window exists
     app = QApplication(sys.argv)
     app.setApplicationName("ytdl-sub-win-gui")
+    if icon_path().exists():
+        app.setWindowIcon(QIcon(str(icon_path())))  # title bar, taskbar, and every dialog
     win = MainWindow()
     win.show()
     return app.exec()

@@ -31,7 +31,7 @@ if not exist .venv (
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install --only-binary=:all: -r requirements.txt pyinstaller || goto :error
-pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui launcher.py || goto :error
+pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py || goto :error
 echo.
 echo Built: %CD%\dist\ytdl-sub-win-gui.exe
 exit /b 0
