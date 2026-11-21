@@ -3,7 +3,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pytest  # noqa: E402
+
 from redrip import oscompat, scheduler  # noqa: E402
+
+# systemd units and .desktop files only exist on Linux (paths here are POSIX paths)
+pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux-only")
 
 
 def test_systemd_units_for_appimage(monkeypatch):
