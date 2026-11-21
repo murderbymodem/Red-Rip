@@ -4,12 +4,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ytdlsub_win_gui import models  # noqa: E402
+from redrip import models  # noqa: E402
 
 
-def test_settings_migrate_from_old_app_name(tmp_path, monkeypatch):
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("old_name", ["ytdl-sub-win-gui", "ytdl-sub-gui"])
+def test_settings_migrate_from_old_app_name(tmp_path, monkeypatch, old_name):
     home = tmp_path / "home"
-    old = home / ".config" / "ytdl-sub-gui"          # %APPDATA%\ytdl-sub-gui on Windows
+    old = home / ".config" / old_name                # %APPDATA%\<old name> on Windows
     (old / "bin").mkdir(parents=True)
     (old / "bin" / "ytdl-sub").write_text("x")
     (old / "state.json").write_text(json.dumps({

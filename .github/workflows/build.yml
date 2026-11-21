@@ -47,16 +47,16 @@ jobs:
             Write-Error "Release tag '$env:TAG' isn't a version number. Use something like v0.1.2."
             exit 1
           }
-          "__version__ = `"$version`"" | Out-File -Encoding utf8NoBOM ytdlsub_win_gui\__init__.py
-          Get-Content ytdlsub_win_gui\__init__.py
+          "__version__ = `"$version`"" | Out-File -Encoding utf8NoBOM redrip\__init__.py
+          Get-Content redrip\__init__.py
 
       - name: Build .exe
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name Red-Rip --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py
 
       - name: Smoke test the .exe
         shell: pwsh
         run: |
-          $p = Start-Process dist\ytdl-sub-win-gui.exe -ArgumentList "--version" -PassThru -Wait
+          $p = Start-Process dist\Red-Rip.exe -ArgumentList "--version" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "--version exited with $($p.ExitCode)"; exit 1 }
 
       - name: Package zip
@@ -67,20 +67,20 @@ jobs:
           # Zip contains one top-level folder, so extracting always gives the app its own folder
           # (it creates its data folder next to the .exe).
           $suffix = if ($env:TAG) { $env:TAG } else { "${{ github.sha }}".Substring(0, 7) }
-          $zipName = "ytdl-sub-win-gui-$suffix.zip"
-          $folder = "package\ytdl-sub-win-gui"
+          $zipName = "Red-Rip-$suffix.zip"
+          $folder = "package\Red-Rip"
           New-Item -ItemType Directory -Force $folder | Out-Null
-          Copy-Item dist\ytdl-sub-win-gui.exe, LICENSE, README.md $folder
+          Copy-Item dist\Red-Rip.exe, LICENSE, README.md $folder
           Compress-Archive -Path $folder -DestinationPath "dist\$zipName" -Force
-          # Verify the layout: ytdl-sub-win-gui\ytdl-sub-win-gui.exe at the top of the zip
+          # Verify the layout: Red-Rip\Red-Rip.exe at the top of the zip
           Expand-Archive "dist\$zipName" -DestinationPath check -Force
-          if (-not (Test-Path "check\ytdl-sub-win-gui\ytdl-sub-win-gui.exe")) { Write-Error "unexpected zip layout"; exit 1 }
+          if (-not (Test-Path "check\Red-Rip\Red-Rip.exe")) { Write-Error "unexpected zip layout"; exit 1 }
           "ZIP_NAME=$zipName" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Checksum
         shell: pwsh
         run: |
-          $lines = foreach ($f in @("dist\$env:ZIP_NAME", "dist\ytdl-sub-win-gui.exe")) {
+          $lines = foreach ($f in @("dist\$env:ZIP_NAME", "dist\Red-Rip.exe")) {
             "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
           }
           $lines | Out-File -Encoding ascii dist\SHA256SUMS.txt
@@ -88,7 +88,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ytdl-sub-win-gui
+          name: Red-Rip
           path: |
             dist/${{ env.ZIP_NAME }}
             dist/SHA256SUMS.txt
@@ -103,6 +103,6 @@ jobs:
           gh release upload "$env:TAG" "dist/$env:ZIP_NAME" dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
           $zipSum = (Get-Content dist\SHA256SUMS.txt | Select-Object -First 1).Split(" ")[0]
           $body = gh release view "$env:TAG" --json body --jq .body --repo "${{ github.repository }}"
-          $extra = "`n`n---`nDownload **$env:ZIP_NAME**, extract it, and run ``ytdl-sub-win-gui\ytdl-sub-win-gui.exe``.`n`nSHA-256 of $($env:ZIP_NAME): ``$zipSum`` (the .exe's checksum is in SHA256SUMS.txt)`nBuilt by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $extra = "`n`n---`nDownload **$env:ZIP_NAME**, extract it, and run ``Red-Rip\Red-Rip.exe``.`n`nSHA-256 of $($env:ZIP_NAME): ``$zipSum`` (the .exe's checksum is in SHA256SUMS.txt)`nBuilt by GitHub Actions from ${{ github.sha }}: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           Set-Content -Path notes.md -Value (($body -join "`n") + $extra) -Encoding utf8
           gh release edit "$env:TAG" --notes-file notes.md --repo "${{ github.repository }}"

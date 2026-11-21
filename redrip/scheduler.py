@@ -10,8 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-TASK_NAME = "ytdl-sub-win-gui daily download"
-OLD_TASK_NAMES = ["ytdl-sub-gui daily download"]  # from before the app was renamed
+TASK_NAME = "Red-Rip daily download"
+OLD_TASK_NAMES = ["ytdl-sub-win-gui daily download", "ytdl-sub-gui daily download"]  # earlier app names
 CREATE_NO_WINDOW = 0x08000000
 
 
@@ -28,7 +28,7 @@ def headless_command() -> tuple[str, str, str]:
     py = Path(sys.executable)
     pyw = py.with_name("pythonw.exe")
     project_root = Path(__file__).resolve().parent.parent
-    return str(pyw if pyw.exists() else py), "-m ytdlsub_win_gui --headless", str(project_root)
+    return str(pyw if pyw.exists() else py), "-m redrip --headless", str(project_root)
 
 
 def _ps_quote(s: str) -> str:
@@ -60,7 +60,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
     -DontStopIfGoingOnBatteries -RunOnlyIfNetworkAvailable -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit (New-TimeSpan -Hours 12)
 Register-ScheduledTask -TaskName {_ps_quote(TASK_NAME)} -Action $action -Trigger $trigger `
-    -Settings $settings -Description 'Downloads new videos for ytdl-sub-win-gui subscriptions.' -Force | Out-Null
+    -Settings $settings -Description 'Red-Rip: downloads new videos for your channels.' -Force | Out-Null
 {_remove_tasks_script(OLD_TASK_NAMES)}
 """
     result = _powershell(script)
