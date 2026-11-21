@@ -51,7 +51,7 @@ jobs:
           Get-Content ytdlsub_win_gui\__init__.py
 
       - name: Build .exe
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui launcher.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name ytdl-sub-win-gui --icon assets/icon.ico --add-data "assets/icon.ico:assets" launcher.py
 
       - name: Smoke test the .exe
         shell: pwsh
