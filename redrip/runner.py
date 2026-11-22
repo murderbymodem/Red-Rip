@@ -11,7 +11,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import configgen
+from . import configgen, net
 from .models import MODE_ALL, AppState, app_dir, bin_dir, logs_dir
 
 CREATE_NO_WINDOW = 0x08000000  # don't flash a console window from the scheduled task
@@ -147,7 +147,7 @@ def refresh_jellyfin(url: str, api_key: str, timeout: float = 15) -> str:
             "X-Emby-Token": api_key,  # older servers
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with net.urlopen(req, timeout=timeout) as resp:
         return f"Jellyfin library refresh requested (HTTP {resp.status})."
 
 
@@ -156,7 +156,7 @@ def test_jellyfin(url: str, api_key: str, timeout: float = 10) -> str:
         url.rstrip("/") + "/System/Info",
         headers={"Authorization": f'MediaBrowser Token="{api_key}"', "X-Emby-Token": api_key},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with net.urlopen(req, timeout=timeout) as resp:
         info = json.loads(resp.read().decode("utf-8"))
     return f"Connected to {info.get('ServerName', 'Jellyfin')} (version {info.get('Version', '?')})."
 

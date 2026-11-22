@@ -6,9 +6,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="Red-Rip")
     from redrip import __version__
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--self-test", action="store_true",
+                        help="check that HTTPS downloads work (certificates), then exit")
     parser.add_argument("--headless", action="store_true",
                         help="run all enabled subscriptions without UI (used by the scheduled task)")
     args = parser.parse_args()
+    if args.self_test:
+        from redrip.net import self_test
+        return self_test()
     if args.headless:
         from redrip.runner import run_headless
         return run_headless()

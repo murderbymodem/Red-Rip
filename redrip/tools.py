@@ -15,6 +15,7 @@ import zipfile
 from pathlib import Path
 from typing import Callable
 
+from . import net
 from .models import Settings, bin_dir
 from .oscompat import IS_WINDOWS, exe, is_arm64, which
 
@@ -41,7 +42,7 @@ Progress = Callable[[str, int, int], None]  # (label, bytes_done, bytes_total)
 def _download(url: str, dest: Path, label: str, progress: Progress | None) -> None:
     tmp = dest.with_suffix(dest.suffix + ".part")
     req = urllib.request.Request(url, headers={"User-Agent": "Red-Rip"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as out:
+    with net.urlopen(req, timeout=60) as resp, open(tmp, "wb") as out:
         total = int(resp.headers.get("Content-Length") or 0)
         done = 0
         while chunk := resp.read(256 * 1024):

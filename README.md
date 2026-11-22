@@ -112,6 +112,10 @@ x86_64 distros from about 2022 on (no `libfuse2` needed).
   logged in and catches up on a missed run when the PC is back on. To also run while logged out:
   `loginctl enable-linger`. If you move the AppImage, click **Apply schedule** again.
 - **Cookies from browser:** Firefox works best; Chromium, Chrome and Brave must be closed.
+- **Certificates:** downloads use your distro's CA bundle (Debian/Ubuntu/Arch, Fedora/RHEL, openSUSE and
+  others are found automatically; `SSL_CERT_FILE` overrides). If a download fails with
+  `CERTIFICATE_VERIFY_FAILED`, run `./Red-Rip-*.AppImage --self-test` in a terminal: it shows which bundle was
+  used and tests an HTTPS connection.
 
 ## Running it
 
