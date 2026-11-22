@@ -17,6 +17,29 @@ def exe(name: str) -> str:
     return name + EXE
 
 
+# Variables the PyInstaller bootloader changes so the bundled Python finds its own libraries
+# (it saves the user's value as <NAME>_ORIG). Programs Red-Rip starts must not inherit them:
+# e.g. the distro's ffmpeg would load the bundled libraries, fail to start, and yt-dlp then
+# reports "ffmpeg not found".
+_BUNDLE_ENV_VARS = ("LD_LIBRARY_PATH",)
+
+
+def restore_system_env(env: dict | None = None) -> dict:
+    """Undo the bundle's library-path changes in env (default: os.environ, in place, which
+    every subprocess / QProcess / xdg-open then inherits). The running process is not
+    affected: the dynamic loader read the variable when the app started."""
+    env = os.environ if env is None else env
+    if not getattr(sys, "frozen", False) or IS_WINDOWS:
+        return env
+    for name in _BUNDLE_ENV_VARS:
+        orig = env.pop(name + "_ORIG", None)
+        if orig:
+            env[name] = orig
+        else:
+            env.pop(name, None)
+    return env
+
+
 def is_arm64() -> bool:
     return platform.machine().lower() in ("aarch64", "arm64")
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import configgen, net
 from .models import MODE_ALL, AppState, app_dir, bin_dir, logs_dir
+from .oscompat import restore_system_env
 
 CREATE_NO_WINDOW = 0x08000000  # don't flash a console window from the scheduled task
 
@@ -66,7 +67,7 @@ class BatchTracker:
 
 def child_env() -> dict:
     """Environment for ytdl-sub: bin folder on PATH so yt-dlp finds deno/ffmpeg."""
-    env = dict(os.environ)
+    env = restore_system_env(dict(os.environ))  # not the bundle's library path
     env["PATH"] = str(bin_dir()) + os.pathsep + env.get("PATH", "")
     # ytdl-sub.exe is Python: make it write UTF-8 so titles/messages aren't garbled (e.g. "you\ufffdre")
     env["PYTHONIOENCODING"] = "utf-8"

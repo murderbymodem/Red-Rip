@@ -57,9 +57,7 @@ def _say(msg: str) -> None:
         print(msg)
 
 
-def self_test() -> int:
-    """`Red-Rip --self-test`: show where certificates come from and try an HTTPS request."""
-    _say(f"CA certificates: {ca_source() or 'system default'}")
+def _https_check() -> int:
     try:
         req = urllib.request.Request("https://github.com/", method="HEAD", headers={"User-Agent": "Red-Rip"})
         with urlopen(req, timeout=20) as resp:
@@ -72,3 +70,32 @@ def self_test() -> int:
     except Exception as exc:
         _say(f"HTTPS to github.com: FAILED ({exc})")
         return 1
+
+
+def _system_ffmpeg_check() -> int:
+    """A system ffmpeg must start with the environment the app gives its tools (it broke
+    when the bundle's LD_LIBRARY_PATH leaked into it)."""
+    import shutil
+    import subprocess
+    from .runner import child_env
+    found = shutil.which("ffmpeg")
+    if not found or sys.platform == "win32":
+        return 0
+    try:
+        out = subprocess.run([found, "-version"], capture_output=True, text=True,
+                             env=child_env(), timeout=20)
+    except Exception as exc:
+        _say(f"System ffmpeg ({found}): FAILED to start ({exc})")
+        return 1
+    if out.returncode != 0:
+        _say(f"System ffmpeg ({found}): FAILED (exit {out.returncode}) {out.stderr.strip()[:300]}")
+        return 1
+    _say(f"System ffmpeg ({found}): OK")
+    return 0
+
+
+def self_test() -> int:
+    """`Red-Rip --self-test`: where certificates come from, an HTTPS request, and (Linux)
+    whether the system ffmpeg starts from inside the app."""
+    _say(f"CA certificates: {ca_source() or 'system default'}")
+    return max(_https_check(), _system_ffmpeg_check())
