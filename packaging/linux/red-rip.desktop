@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Red-Rip
+Name=Red Rip
 GenericName=YouTube channel downloader
 Comment=Download YouTube channels into a Jellyfin library
 Exec=Red-Rip %U

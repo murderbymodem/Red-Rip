@@ -18,7 +18,7 @@ def exe(name: str) -> str:
 
 
 # Variables the PyInstaller bootloader changes so the bundled Python finds its own libraries
-# (it saves the user's value as <NAME>_ORIG). Programs Red-Rip starts must not inherit them:
+# (it saves the user's value as <NAME>_ORIG). Programs Red Rip starts must not inherit them:
 # e.g. the distro's ffmpeg would load the bundled libraries, fail to start, and yt-dlp then
 # reports "ffmpeg not found".
 _BUNDLE_ENV_VARS = ("LD_LIBRARY_PATH",)
@@ -76,7 +76,7 @@ def desktop_entry_path() -> Path:
 
 
 def install_desktop_entry(icon_png: Path) -> Path:
-    """Adds Red-Rip to the application menu (KDE's launcher, etc.) pointing at this AppImage."""
+    """Adds Red Rip to the application menu (KDE's launcher, etc.) pointing at this AppImage."""
     app = appimage_path()
     if app is None:
         raise RuntimeError("Only available when running the AppImage.")
@@ -89,7 +89,7 @@ def install_desktop_entry(icon_png: Path) -> Path:
     entry.write_text(
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=Red-Rip\n"
+        "Name=Red Rip\n"
         "Comment=Download YouTube channels into a Jellyfin library\n"
         f'Exec="{exec_path}"\n'
         f"Icon={DESKTOP_ID}\n"

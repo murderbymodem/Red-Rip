@@ -312,7 +312,7 @@ class MainWindow(QMainWindow):
         self.log_file = None
         self._tools_thread = None
         self._tools_dlg = None
-        self.setWindowTitle(f"Red-Rip {__version__} — YouTube to Jellyfin")
+        self.setWindowTitle(f"Red Rip {__version__} — YouTube to Jellyfin")
         self.resize(1050, 720)
 
         tabs = QTabWidget()
@@ -1268,7 +1268,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(jf)
         lay.addStretch(1)
         credits = QLabel(
-            f"Red-Rip {__version__} · "
+            f"Red Rip {__version__} · "
             '<a href="https://github.com/murderbymodem/red-rip">github.com/murderbymodem/red-rip</a><br>'
             'Built on <a href="https://github.com/jmbannon/ytdl-sub">ytdl-sub</a> and '
             '<a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>, with '
@@ -1284,8 +1284,8 @@ class MainWindow(QMainWindow):
 
     def _update_menu_btn(self):
         exists = oscompat.desktop_entry_path().exists()
-        self.menu_btn.setText("Remove from application menu" if exists else "Add Red-Rip to the application menu")
-        self.menu_btn.setToolTip(f"Creates {oscompat.desktop_entry_path()} pointing at this AppImage, so Red-Rip "
+        self.menu_btn.setText("Remove from application menu" if exists else "Add Red Rip to the application menu")
+        self.menu_btn.setToolTip(f"Creates {oscompat.desktop_entry_path()} pointing at this AppImage, so Red Rip "
                                  "appears in the KDE launcher (and other desktops' menus). If you move the "
                                  "AppImage, add it again.")
 
@@ -1565,7 +1565,7 @@ def run_gui() -> int:
     _set_windows_app_id()  # must happen before any window exists
     _prepare_linux_qt()
     app = QApplication(sys.argv)
-    app.setApplicationName("Red-Rip")
+    app.setApplicationName("Red-Rip")  # technical id; the window title shows "Red Rip"
     if IS_LINUX:
         _setup_linux_look(app)
     if icon_path().exists():

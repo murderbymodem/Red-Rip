@@ -1,4 +1,4 @@
-"""HTTPS for Red-Rip's own downloads (tools, Jellyfin).
+"""HTTPS for Red Rip's own downloads (tools, Jellyfin).
 
 A bundled Python (PyInstaller, inside the AppImage) looks for trusted CA certificates
 where they were on the *build* machine. Every Linux distro keeps them somewhere else, so

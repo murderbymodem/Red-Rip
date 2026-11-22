@@ -16,8 +16,9 @@ from pathlib import Path
 
 from .oscompat import IS_WINDOWS, appimage_path, xdg_config_home
 
-TASK_NAME = "Red-Rip daily download"
-OLD_TASK_NAMES = ["ytdl-sub-win-gui daily download", "ytdl-sub-gui daily download"]  # earlier app names
+TASK_NAME = "Red Rip daily download"
+# Earlier names (replaced automatically): the task points at the old .exe / gets renamed
+OLD_TASK_NAMES = ["Red-Rip daily download", "ytdl-sub-win-gui daily download", "ytdl-sub-gui daily download"]
 CREATE_NO_WINDOW = 0x08000000
 
 
@@ -76,7 +77,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
     -DontStopIfGoingOnBatteries -RunOnlyIfNetworkAvailable -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit (New-TimeSpan -Hours 12)
 Register-ScheduledTask -TaskName {_ps_quote(TASK_NAME)} -Action $action -Trigger $trigger `
-    -Settings $settings -Description 'Red-Rip: downloads new videos for your channels.' -Force | Out-Null
+    -Settings $settings -Description 'Red Rip: downloads new videos for your channels.' -Force | Out-Null
 {_remove_tasks_script(OLD_TASK_NAMES)}
 """
     result = _powershell(script)
@@ -145,7 +146,7 @@ def unit_files(time_hhmm: str) -> tuple[str, str]:
     exec_start = " ".join([_systemd_quote(exe), *[_systemd_quote(a) for a in args.split()]])
     service = (
         "[Unit]\n"
-        "Description=Red-Rip: download new videos for your channels\n"
+        "Description=Red Rip: download new videos for your channels\n"
         "\n[Service]\n"
         "Type=oneshot\n"
         f"ExecStart={exec_start}\n"
@@ -155,7 +156,7 @@ def unit_files(time_hhmm: str) -> tuple[str, str]:
     )
     timer = (
         "[Unit]\n"
-        "Description=Red-Rip daily download\n"
+        "Description=Red Rip daily download\n"
         "\n[Timer]\n"
         f"OnCalendar=*-*-* {time_hhmm}:00\n"
         "Persistent=true\n"        # run a missed run as soon as possible (PC was off/asleep)
