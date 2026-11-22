@@ -61,6 +61,9 @@ jobs:
         run: |
           $p = Start-Process dist\Red-Rip.exe -ArgumentList "--version" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "--version exited with $($p.ExitCode)"; exit 1 }
+          # HTTPS from inside the built app (certificates) must work for the tools download
+          $p = Start-Process dist\Red-Rip.exe -ArgumentList "--self-test" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Write-Error "--self-test (HTTPS) failed"; exit 1 }
 
       - name: Package zip
         shell: pwsh
@@ -129,6 +132,8 @@ jobs:
         run: |
           app=$(ls out/*.AppImage)
           "$app" --version
+          # HTTPS from inside the AppImage must work (certificates are found per distro)
+          "$app" --self-test
           # The window must come up and keep running (timeout's exit code 124 = still running)
           set +e; timeout 15 "$app"; code=$?; set -e
           if [ "$code" -ne 124 ]; then echo "::error::the app exited early (code $code)"; exit 1; fi
