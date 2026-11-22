@@ -1,4 +1,4 @@
-# Red-Rip
+# Red Rip
 A Windows and Linux app that downloads YouTube channels into a Jellyfin library, on a schedule.
 
 Red-Rip is an unofficial desktop frontend for [ytdl-sub](https://github.com/jmbannon/ytdl-sub), which does the
