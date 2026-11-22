@@ -3,7 +3,9 @@ import sys
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="Red-Rip")
+    from redrip.oscompat import restore_system_env
+    restore_system_env()  # programs we start (ffmpeg, yt-dlp, ...) get the system's libraries
+    parser = argparse.ArgumentParser(prog="Red Rip")
     from redrip import __version__
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--self-test", action="store_true",

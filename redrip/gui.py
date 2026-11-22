@@ -35,6 +35,14 @@ def mono_font() -> QFont:
     return f
 
 
+def _process_env() -> QProcessEnvironment:
+    """Environment for ytdl-sub / yt-dlp: the user's own (see runner.child_env)."""
+    env = QProcessEnvironment()
+    for k, v in runner.child_env().items():
+        env.insert(k, v)
+    return env
+
+
 def open_path(path: Path) -> None:
     if sys.platform == "win32":
         os.startfile(str(path))  # type: ignore[attr-defined]
@@ -304,7 +312,7 @@ class MainWindow(QMainWindow):
         self.log_file = None
         self._tools_thread = None
         self._tools_dlg = None
-        self.setWindowTitle(f"Red-Rip {__version__} — YouTube to Jellyfin")
+        self.setWindowTitle(f"Red Rip {__version__} — YouTube to Jellyfin")
         self.resize(1050, 720)
 
         tabs = QTabWidget()
@@ -712,9 +720,7 @@ class MainWindow(QMainWindow):
 
         self.proc = QProcess(self)
         self.proc.setWorkingDirectory(str(app_dir()))
-        env = QProcessEnvironment.systemEnvironment()
-        env.insert("PATH", runner.child_env()["PATH"])
-        self.proc.setProcessEnvironment(env)
+        self.proc.setProcessEnvironment(_process_env())
         self.proc.setProcessChannelMode(QProcess.MergedChannels)
         self.proc.readyReadStandardOutput.connect(self._read_proc)
         self.proc.finished.connect(self._proc_finished)
@@ -1059,11 +1065,7 @@ class MainWindow(QMainWindow):
         self._q_append(f"\n$ {subprocess.list2cmdline(cmd)}\n")
         self.q_proc = QProcess(self)
         self.q_proc.setWorkingDirectory(str(item["folder"]))
-        env = QProcessEnvironment.systemEnvironment()
-        for k, v in runner.child_env().items():
-            if k in ("PATH", "PYTHONIOENCODING", "PYTHONUTF8"):
-                env.insert(k, v)
-        self.q_proc.setProcessEnvironment(env)
+        self.q_proc.setProcessEnvironment(_process_env())
         self.q_proc.setProcessChannelMode(QProcess.MergedChannels)
         self.q_proc.readyReadStandardOutput.connect(self._q_read)
         self.q_proc.finished.connect(self._q_finished)
@@ -1266,7 +1268,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(jf)
         lay.addStretch(1)
         credits = QLabel(
-            f"Red-Rip {__version__} · "
+            f"Red Rip {__version__} · "
             '<a href="https://github.com/murderbymodem/red-rip">github.com/murderbymodem/red-rip</a><br>'
             'Built on <a href="https://github.com/jmbannon/ytdl-sub">ytdl-sub</a> and '
             '<a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>, with '
@@ -1282,8 +1284,8 @@ class MainWindow(QMainWindow):
 
     def _update_menu_btn(self):
         exists = oscompat.desktop_entry_path().exists()
-        self.menu_btn.setText("Remove from application menu" if exists else "Add Red-Rip to the application menu")
-        self.menu_btn.setToolTip(f"Creates {oscompat.desktop_entry_path()} pointing at this AppImage, so Red-Rip "
+        self.menu_btn.setText("Remove from application menu" if exists else "Add Red Rip to the application menu")
+        self.menu_btn.setToolTip(f"Creates {oscompat.desktop_entry_path()} pointing at this AppImage, so Red Rip "
                                  "appears in the KDE launcher (and other desktops' menus). If you move the "
                                  "AppImage, add it again.")
 
@@ -1563,7 +1565,7 @@ def run_gui() -> int:
     _set_windows_app_id()  # must happen before any window exists
     _prepare_linux_qt()
     app = QApplication(sys.argv)
-    app.setApplicationName("Red-Rip")
+    app.setApplicationName("Red-Rip")  # technical id; the window title shows "Red Rip"
     if IS_LINUX:
         _setup_linux_look(app)
     if icon_path().exists():

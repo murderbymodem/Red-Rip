@@ -1,12 +1,12 @@
 # Red Rip
 A Windows and Linux app that downloads YouTube channels into a Jellyfin library, on a schedule.
 
-Red-Rip is an unofficial desktop frontend for [ytdl-sub](https://github.com/jmbannon/ytdl-sub), which does the
+Red Rip is an unofficial desktop frontend for [ytdl-sub](https://github.com/jmbannon/ytdl-sub), which does the
 downloading with [yt-dlp](https://github.com/yt-dlp/yt-dlp). Add YouTube channels, choose how much to download,
 and it fetches new videos every day into a Jellyfin-ready TV library. It writes ytdl-sub's YAML for you.
 
 Not affiliated with the ytdl-sub or yt-dlp projects, and not the same as ytdl-sub's own `ytdl-sub-gui`
-container image (a web-based config editor). Red-Rip was previously named ytdl-sub-win-gui.
+container image (a web-based config editor). Red Rip was previously named ytdl-sub-win-gui.
 
 <img width="805" height="950" alt="Red-Rip_IdhYzaWYfd" src="https://github.com/user-attachments/assets/31b53472-7646-47c1-8be8-e7194a229d72" />
 
@@ -100,7 +100,7 @@ x86_64 distros from about 2022 on (no `libfuse2` needed).
 - **Looks native-ish:** the app uses Qt's Fusion style (a bundled Qt can't load the system's Breeze style),
   coloured to follow Plasma's light/dark setting live. File dialogs are KDE's own, through
   `xdg-desktop-portal-kde`, which Plasma installs by default.
-- **Taskbar and menu:** the window uses the Red-Rip icon in the Wayland taskbar. **Settings → Add Red-Rip to
+- **Taskbar and menu:** the window uses the Red Rip icon in the Wayland taskbar. **Settings → Add Red Rip to
   the application menu** adds it to the launcher (pointing at the AppImage; add it again if you move the file).
   AppImageLauncher or Gear Lever can do the same.
 - **Data:** settings, logs and downloaded tools are in `~/.local/share/Red-Rip` (an AppImage can't write
@@ -139,7 +139,7 @@ First launch:
 **Upgrading from an earlier name (`ytdl-sub-win-gui` or `ytdl-sub-gui`):** put `Red-Rip.exe` in the same
 folder as the old `.exe` and delete the old one. The `data` folder (channels, settings, tools) is used as is.
 Open the app once: it replaces the old scheduled task ("ytdl-sub-win-gui daily download" or "ytdl-sub-gui
-daily download") with "Red-Rip daily download", keeping your schedule.
+daily download") with "Red Rip daily download", keeping your schedule.
 
 ## Jellyfin setup
 
@@ -181,7 +181,7 @@ Before every run the app regenerates:
 
 Then it runs `ytdl-sub --config config.yaml sub subscriptions.yaml`. ytdl-sub keeps a download archive per show, so later runs only fetch videos it hasn't seen.
 
-The scheduled task is named **"Red-Rip daily download"**. It runs `Red-Rip.exe --headless` as your user, while you're signed in. Logs go to `data\logs\`. If you move the app folder, click **Apply schedule** again so the task points to the new location.
+The scheduled task is named **"Red Rip daily download"**. It runs `Red-Rip.exe --headless` as your user, while you're signed in. Logs go to `data\logs\`. If you move the app folder, click **Apply schedule** again so the task points to the new location.
 
 ## Tips
 
@@ -214,17 +214,17 @@ from the tag. Always use a new tag: re-using a deleted release's tag rebuilds th
 
 ## Credits
 
-Red-Rip is a frontend; the real work is done by these projects:
+Red Rip is a frontend; the real work is done by these projects:
 
 - [ytdl-sub](https://github.com/jmbannon/ytdl-sub) by jmbannon (GPL-3.0): subscriptions, presets, Jellyfin
-  naming and metadata. Red-Rip generates its configuration and runs it.
+  naming and metadata. Red Rip generates its configuration and runs it.
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense): the downloader used by ytdl-sub and by the Quick
   download tab.
 - [FFmpeg](https://ffmpeg.org) (merging and converting) and [Deno](https://deno.com) (the JavaScript runtime
   yt-dlp uses for YouTube).
 
-Red-Rip downloads these tools from their official releases; it doesn't include or modify them.
-Red-Rip itself is licensed under GPL-3.0 (see `LICENSE`).
+Red Rip downloads these tools from their official releases; it doesn't include or modify them.
+Red Rip itself is licensed under GPL-3.0 (see `LICENSE`).
 
 ## Development
 
